@@ -1,0 +1,33 @@
+# STM32CubeIDE Build Outputs
+Debug/
+Release/
+
+# Build artifacts
+*.o
+*.su
+*.cyclo
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.lst
+
+# STM32CubeIDE project files
+.settings/
+.cproject
+.project
+.mxproject
+
+# Temporary files
+*.bak
+*.swp
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
