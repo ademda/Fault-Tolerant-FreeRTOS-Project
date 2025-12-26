@@ -1,0 +1,5 @@
+../App/Src/app_tasks.c:13:6:SensorTaskHandler	1
+../App/Src/app_tasks.c:20:6:ControlTaskHandler	1
+../App/Src/app_tasks.c:28:6:MonitorTaskHandler	1
+../App/Src/app_tasks.c:35:6:ComTaskHandler	1
+../App/Src/app_tasks.c:42:6:FaultTaskHandler	1

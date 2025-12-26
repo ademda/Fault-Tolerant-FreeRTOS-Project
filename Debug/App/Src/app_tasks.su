@@ -1,0 +1,5 @@
+../App/Src/app_tasks.c:13:6:SensorTaskHandler	16	static
+../App/Src/app_tasks.c:20:6:ControlTaskHandler	16	static
+../App/Src/app_tasks.c:28:6:MonitorTaskHandler	16	static
+../App/Src/app_tasks.c:35:6:ComTaskHandler	16	static
+../App/Src/app_tasks.c:42:6:FaultTaskHandler	16	static
