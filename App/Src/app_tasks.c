@@ -9,39 +9,58 @@
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include <stdlib.h>
+#include <string.h>
 
-void SensorTaskHandler(void *pvParameters ){
-    for (;;)
-    {
+extern UART_HandleTypeDef huart2;
 
-    }
-    vTaskDelete(NULL);
-}
-void ControlTaskHandler(void *pvParameters ){
-	for (;;)
-	{
+
+void SPISensorTaskHandler(void *pvParameters ){
+	for (;;){
 
 	}
 	vTaskDelete(NULL);
+}
 
+void UARTReceiverTaskHandler(void *pvParameters ){
+	for (;;){
+
+	}
+	vTaskDelete(NULL);
+}
+
+void ADCSensorTaskHandler(void *pvParameters ){
+	for (;;){
+
+	}
+	vTaskDelete(NULL);
+}
+void ConsumerTaskHandler(void *pvParameters){
+	for (;;){
+
+	}
+	vTaskDelete(NULL);
+}
+void InterfaceTaskHandler(void *pvParameters){
+	for (;;){
+
+	}
+	vTaskDelete(NULL);
 }
 void MonitorTaskHandler(void *pvParameters ){
-	for (;;)
-	{
+	for (;;){
 
 	}
 	vTaskDelete(NULL);
 }
-void ComTaskHandler(void *pvParameters ){
-	for (;;)
-	{
+void FlowControlTaskHandler(void *pvParameters ){
+	for (;;){
 
 	}
 	vTaskDelete(NULL);
 }
 void FaultTaskHandler(void *pvParameters ){
-	for (;;)
-	{
+	for (;;){
 
 	}
 	vTaskDelete(NULL);

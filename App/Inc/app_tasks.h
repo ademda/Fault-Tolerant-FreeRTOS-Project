@@ -10,10 +10,13 @@
 
 #include "main.h"
 
-void SensorTaskHandler(void *pvParameters );
-void ControlTaskHandler(void *pvParameters );
+void SPISensorTaskHandler(void *pvParameters );
+void UARTReceiverTaskHandler(void *pvParameters );
+void ADCSensorTaskHandler(void *pvParameters );
+void ConsumerTaskHandler(void *pvParameters);
+void InterfaceTaskHandler(void *pvParameters);
 void MonitorTaskHandler(void *pvParameters );
-void ComTaskHandler(void *pvParameters );
+void FlowControlTaskHandler(void *pvParameters );
 void FaultTaskHandler(void *pvParameters );
 
 #endif /* INC_APP_TASKS_H_ */

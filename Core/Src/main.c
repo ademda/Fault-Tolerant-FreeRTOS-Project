@@ -18,13 +18,15 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "FreeRTOS.h"
-#include "app_tasks.h"
-#include "task.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+#include "sensors.h"
+#include "semphr.h"
+#include "consumer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,11 +36,14 @@
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */    
-#define SENSOR_TASK_STACK_SIZE			  1024
-#define CONTROL_TASK_STACK_SIZE			  1024
-#define MONITOR_TASK_STACK_SIZE			  1024
-#define COM_TASK_STACK_SIZE				    1024
+/* USER CODE BEGIN PD */
+#define ADC_SENSOR_TASK_STACK_SIZE		1024
+#define SPI_SENSOR_TASK_STACK_SIZE		1024
+#define UART_RECEIVER_TASK_STACK_SIZE	1024
+#define FLOW_CONTROL_TASK_STACK_SIZE	1024
+#define MONITOR_TASK_STACK_SIZE			1024
+#define CONSUMER_TASK_STACK_SIZE		1024
+#define INTERFACE_TASK_STACK_SIZE		1024
 #define FAULT_HANDLER_TASK_STACK_SIZE	1024
 
 /* USER CODE END PD */
@@ -49,17 +54,34 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
- TaskHandle_t SensorTask;
- TaskHandle_t ControlTask;
- TaskHandle_t MonitorTask;
- TaskHandle_t ComTask;
- TaskHandle_t FaultHandlerTask;
+TaskHandle_t SPISensorTask;
+TaskHandle_t ADCSensorTask;
+TaskHandle_t UARTReceiverTask;
+TaskHandle_t ConsumerTask;
+TaskHandle_t FlowControlTask;
+TaskHandle_t MonitorTask;
+TaskHandle_t InterfaceTask;
+TaskHandle_t FaultHandlerTask;
+
+QueueHandle_t  adc_sensor_queue;
+QueueHandle_t  spi_sensor_queue;
+QueueHandle_t  uart_receiver_queue;
+QueueHandle_t  consumer_data_info_queue;
+
+SemaphoreHandle_t dwt_mutex;
+SemaphoreHandle_t wdog_mutex;
+SemaphoreHandle_t sensor_data_mutex;
+
+float consumer_raw_data[1000];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -97,22 +119,39 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  create_status = xTaskCreate(SensorTaskHandler, "Sensor Task", SENSOR_TASK_STACK_SIZE, NULL, 3, &SensorTask);
+  adc_sensor_queue = xQueueCreate(100, sizeof(float));
+  spi_sensor_queue = xQueueCreate(100, sizeof(imu_data_t*));
+  uart_receiver_queue = xQueueCreate(100, sizeof(uint8_t));
+  consumer_data_info_queue = xQueueCreate(100, sizeof(sensor_data_t));
+
+  sensor_data_mutex = xSemaphoreCreateMutex();
+  dwt_mutex = xSemaphoreCreateMutex();
+  wdog_mutex = xSemaphoreCreateMutex();
+
+  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 3, &ADCSensorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(ControlTaskHandler, "Control Task", CONTROL_TASK_STACK_SIZE, NULL, 4, &ControlTask);
+  create_status = xTaskCreate(SPISensorTaskHandler, "SPI Sensor Task", SPI_SENSOR_TASK_STACK_SIZE, NULL, 3, &SPISensorTask);
+  configASSERT(create_status == pdPASS);
+
+  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 3, &ConsumerTask);
+  configASSERT(create_status == pdPASS);
+
+  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 3, &FlowControlTask);
   configASSERT(create_status == pdPASS);	  
 
   create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 1, &MonitorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(ComTaskHandler, "Communication Task", COM_TASK_STACK_SIZE, NULL, 2, &ComTask);
+  create_status = xTaskCreate(InterfaceTaskHandler, "Communication Task", INTERFACE_TASK_STACK_SIZE, NULL, 2, &InterfaceTask);
   configASSERT(create_status == pdPASS);
 
   create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 0, &FaultHandlerTask);
   configASSERT(create_status == pdPASS);
-  
+  vTaskStartScheduler();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -170,6 +209,58 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief GPIO Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPIO_Init(void)
+{
+  /* USER CODE BEGIN MX_GPIO_Init_1 */
+
+  /* USER CODE END MX_GPIO_Init_1 */
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  /* USER CODE BEGIN MX_GPIO_Init_2 */
+
+  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */

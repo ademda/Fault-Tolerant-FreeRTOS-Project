@@ -26,6 +26,8 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_pwr_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
+ ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
+ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/FreeRTOS.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/FreeRTOSConfig.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/projdefs.h \
@@ -33,7 +35,6 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/deprecated_definitions.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/portable/GCC/ARM_CM4F/portmacro.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/mpu_wrappers.h \
- C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/task.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/list.h
 ../Core/Inc/main.h:
@@ -64,6 +65,8 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_pwr_ex.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h:
+../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
+C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/FreeRTOS.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/FreeRTOSConfig.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/projdefs.h:
@@ -71,6 +74,5 @@ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/deprecated_definitions.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/portable/GCC/ARM_CM4F/portmacro.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/mpu_wrappers.h:
-C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/task.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/list.h:

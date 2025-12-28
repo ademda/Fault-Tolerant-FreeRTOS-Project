@@ -27,6 +27,7 @@ App/Src/app_tasks.o: ../App/Src/app_tasks.c \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_pwr_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
+ ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/FreeRTOS.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/FreeRTOSConfig.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/projdefs.h \
@@ -65,6 +66,7 @@ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_pwr_ex.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h:
+../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/FreeRTOS.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/FreeRTOSConfig.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/projdefs.h:
