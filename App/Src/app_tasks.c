@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 //COMM PROTOCOLS EXTERNS
 extern UART_HandleTypeDef huart2;
 extern ADC_HandleTypeDef hadc1;
@@ -32,26 +33,21 @@ extern QueueHandle_t i2c_sensor_queue;
 extern QueueHandle_t uart_receiver_queue;
 extern QueueHandle_t consumer_data_info_queue;
 
-
 void I2CSensorTaskHandler(void *pvParameters ){
 	for (;;){
-		if (imu.state == MPU6050_IDLE || imu.state == MPU6050_GYRO_READING_CMPLT){
-			MPU6050_Read_Accel_DMA(&imu);
-			imu.state = MPU6050_ACCEL_READING;
+		MPU6050_Read_Accel_DMA(&imu);
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		MPU6050_Read_Accel_DMA_Complete(&imu);
+
+		MPU6050_Read_Gyro_DMA(&imu);
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		MPU6050_Read_Gyro_DMA_Complete(&imu);
+		imu_queue_item.pitch = imu.pitch;
+		imu_queue_item = imu.roll;
+		if (xQueueSend(&i2c_sensor_queue, &imu_queue_item, 10) != pdPASS){
+			Error_Handler();
 		}
-		else if (imu.state == MPU6050_ACCEL_READING_CMPLT){
-			MPU6050_Read_Gyro_DMA(&imu);
-			imu->state = MPU6050_GYRO_READING;
-		}
-		else if (imu.state == MPU6050_GYRO_READING_CMPLT){
-			imu_queue_item.pitch = imu.pitch;
-			imu_queue_item = imu.roll;
-			if (xQueueSend(&i2c_sensor_queue, &imu_queue_item, 10) != pdPASS){
-				Error_Handler();
-			}
-			imu.state = MPU6050_IDLE;
-		}
-		//vTaskDelayUntil()
+	//vTaskDelayUntil()
 	}
 	vTaskDelete(NULL);
 }

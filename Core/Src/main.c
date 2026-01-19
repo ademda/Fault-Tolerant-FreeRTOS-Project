@@ -150,6 +150,7 @@ int main(void)
   dwt_mutex = xSemaphoreCreateMutex();
   wdog_mutex = xSemaphoreCreateMutex();
 
+
   create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 3, &ADCSensorTask);
   configASSERT(create_status == pdPASS);
 
@@ -170,6 +171,8 @@ int main(void)
 
   create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 0, &FaultHandlerTask);
   configASSERT(create_status == pdPASS);
+
+
   vTaskStartScheduler();
   /* USER CODE END 2 */
 
@@ -428,7 +431,9 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
     // conversion complete and sent to the lum_value variable
-	xTaskNotify(ADCSensorTask, NULL, eNoAction);
+	xHigherPriorityTaskWoken = pdFALSE;
+	xTaskNotifyFromISR(ADCSensorTask, NULL, eNoAction, &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 
 
@@ -437,14 +442,9 @@ void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c){
 }
 
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c){
-	if (imu.state == MPU6050_ACCEL_READING){
-		MPU6050_Read_Accel_DMA_Complete(&imu);
-		imu.state = MPU6050_ACCEL_READING_CMPLT;
-	}
-	else if(imu.state == MPU6050_GYRO_READING){
-		MPU6050_Read_Gyro_DMA_Complete(&imu);
-		imu.state = MPU6050_GYRO_READING_CMPLT;
-	}
+	xHigherPriorityTaskWoken = pdFALSE;
+	vTaskNotifyGiveFromISR(i2c_sensor_queue, &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 /* USER CODE END 4 */
 
