@@ -5,4 +5,8 @@
  *      Author: dalya
  */
 
-#include "sensors.h"
+#include "adc_sensor.h"
+
+uint16_t lum_value = 0;
+
+

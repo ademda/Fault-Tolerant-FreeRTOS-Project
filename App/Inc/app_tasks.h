@@ -10,7 +10,7 @@
 
 #include "main.h"
 
-void SPISensorTaskHandler(void *pvParameters );
+void I2CSensorTaskHandler(void *pvParameters );
 void UARTReceiverTaskHandler(void *pvParameters );
 void ADCSensorTaskHandler(void *pvParameters );
 void ConsumerTaskHandler(void *pvParameters);
