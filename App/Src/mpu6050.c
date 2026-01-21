@@ -5,7 +5,13 @@
  *      Author: dalya
  */
 
+#include <stdlib.h>
 #include "main.h"
+#include "mpu6050.h"
+#include <string.h>
+#include "math.h"
+
+#define G 9.81
 
 extern I2C_HandleTypeDef hi2c1;
 float Gx_sum = 0, Gy_sum = 0, Gz_sum = 0;
@@ -13,6 +19,7 @@ const int NUM_SAMPLES = 500;
 uint16_t calib_iter = 0;
 MPU6050_t imu;
 MPU6050_queue_item_t imu_queue_item;
+
 
 HAL_StatusTypeDef MPU6050_Init(MPU6050_t *imu){
 
@@ -87,9 +94,9 @@ void MPU6050_Read_Accel(MPU6050_t *imu){
 	int16_t Accel_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
 	int16_t Accel_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
 
-	float Ax = (float)Accel_X_RAW / 16384.0 * g;
-	float Ay = (float)Accel_Y_RAW / 16384.0 * g;
-	float Az = (float)Accel_Z_RAW / 16384.0 * g;
+	float Ax = (float)Accel_X_RAW / 16384.0 * G;
+	float Ay = (float)Accel_Y_RAW / 16384.0 * G;
+	float Az = (float)Accel_Z_RAW / 16384.0 * G;
 
 	// Compute tilt angles (in degrees)
 	imu->roll  = atan2f(Ay, sqrtf(Ax * Ax + Az * Az));  
@@ -154,9 +161,9 @@ void MPU6050_Read_Accel_DMA_Complete(MPU6050_t *imu){
 	int16_t Accel_Y_RAW = (int16_t)(imu->accRxBuf[2] << 8 | imu->accRxBuf [3]);
 	int16_t Accel_Z_RAW = (int16_t)(imu->accRxBuf[4] << 8 | imu->accRxBuf [5]);
 
-	float Ax = (float)Accel_X_RAW / 16384.0 * g;
-	float Ay = (float)Accel_Y_RAW / 16384.0 * g;
-	float Az = (float)Accel_Z_RAW / 16384.0 * g;
+	float Ax = (float)Accel_X_RAW / 16384.0 * G;
+	float Ay = (float)Accel_Y_RAW / 16384.0 * G;
+	float Az = (float)Accel_Z_RAW / 16384.0 * G;
 
 	// Compute tilt angles (in degrees)
 	imu->roll = atan2f(Ay, sqrtf(Ax * Ax + Az * Az));

@@ -8,6 +8,8 @@
 #ifndef INC_CONSUMER_H_
 #define INC_CONSUMER_H_
 
+#include <stdint.h>
+
 typedef struct {
 	float *pdata;
 	double timestamp;

@@ -8,7 +8,8 @@
 #ifndef INC_ADC_SENSOR_H_
 #define INC_ADC_SENSOR_H_
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc);
+#include <stdint.h>
+
 
 typedef struct {
 	uint8_t accRxBuf[8];

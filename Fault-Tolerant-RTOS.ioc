@@ -87,6 +87,7 @@ NVIC.SysTick_IRQn=true\:0\:0\:false\:false\:false\:true\:true\:false
 NVIC.TIM5_IRQn=true\:0\:0\:false\:false\:true\:false\:true\:true
 NVIC.TimeBase=TIM5_IRQn
 NVIC.TimeBaseIP=TIM5
+NVIC.USART1_IRQn=true\:0\:0\:false\:false\:true\:true\:true\:true
 NVIC.UsageFault_IRQn=true\:0\:0\:false\:false\:true\:false\:false\:false
 PA1.Signal=ADCx_IN1
 PA10.Mode=Asynchronous

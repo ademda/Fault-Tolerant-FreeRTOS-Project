@@ -17,7 +17,6 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include <adc_sensor.h>
 #include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -27,6 +26,11 @@
 #include "queue.h"
 #include "semphr.h"
 #include "consumer.h"
+#include "adc_sensor.h"
+#include "mpu6050.h"
+#include "uart_device.h"
+#include "app_tasks.h"
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,6 +70,8 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 extern MPU6050_t imu;
+extern uint8_t uart_rx_buffer[UART_FRAME_SIZE];
+extern char *uart_tx_buffer;
 
 TaskHandle_t I2CSensorTask;
 TaskHandle_t ADCSensorTask;
@@ -143,7 +149,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   adc_sensor_queue = xQueueCreate(100, sizeof(float));
   i2c_sensor_queue = xQueueCreate(100, sizeof(imu_data_t*));
-  uart_receiver_queue = xQueueCreate(100, sizeof(uint8_t));
+  uart_receiver_queue = xQueueCreate(100, UART_FRAME_SIZE);
   consumer_data_info_queue = xQueueCreate(100, sizeof(sensor_data_t));
 
   sensor_data_mutex = xSemaphoreCreateMutex();
@@ -431,19 +437,26 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
     // conversion complete and sent to the lum_value variable
-	xHigherPriorityTaskWoken = pdFALSE;
-	xTaskNotifyFromISR(ADCSensorTask, NULL, eNoAction, &xHigherPriorityTaskWoken);
-	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	xTaskNotifyFromISR(ADCSensorTask, 0, eNoAction, &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR( xHigherPriorityTaskWoken);
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
+    HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(UARTReceiverTask, 0, eNoAction, &xHigherPriorityTaskWoken);
+}
 
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c){
 
 }
 
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c){
-	xHigherPriorityTaskWoken = pdFALSE;
-	vTaskNotifyGiveFromISR(i2c_sensor_queue, &xHigherPriorityTaskWoken);
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	vTaskNotifyGiveFromISR(I2CSensorTask, &xHigherPriorityTaskWoken);
 	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 /* USER CODE END 4 */

@@ -5,13 +5,25 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../App/Src/app_tasks.c 
+../App/Src/adc_sensor.c \
+../App/Src/app_tasks.c \
+../App/Src/consumer.c \
+../App/Src/mpu6050.c \
+../App/Src/uart_device.c 
 
 OBJS += \
-./App/Src/app_tasks.o 
+./App/Src/adc_sensor.o \
+./App/Src/app_tasks.o \
+./App/Src/consumer.o \
+./App/Src/mpu6050.o \
+./App/Src/uart_device.o 
 
 C_DEPS += \
-./App/Src/app_tasks.d 
+./App/Src/adc_sensor.d \
+./App/Src/app_tasks.d \
+./App/Src/consumer.d \
+./App/Src/mpu6050.d \
+./App/Src/uart_device.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
@@ -21,7 +33,7 @@ App/Src/%.o App/Src/%.su App/Src/%.cyclo: ../App/Src/%.c App/Src/subdir.mk
 clean: clean-App-2f-Src
 
 clean-App-2f-Src:
-	-$(RM) ./App/Src/app_tasks.cyclo ./App/Src/app_tasks.d ./App/Src/app_tasks.o ./App/Src/app_tasks.su
+	-$(RM) ./App/Src/adc_sensor.cyclo ./App/Src/adc_sensor.d ./App/Src/adc_sensor.o ./App/Src/adc_sensor.su ./App/Src/app_tasks.cyclo ./App/Src/app_tasks.d ./App/Src/app_tasks.o ./App/Src/app_tasks.su ./App/Src/consumer.cyclo ./App/Src/consumer.d ./App/Src/consumer.o ./App/Src/consumer.su ./App/Src/mpu6050.cyclo ./App/Src/mpu6050.d ./App/Src/mpu6050.o ./App/Src/mpu6050.su ./App/Src/uart_device.cyclo ./App/Src/uart_device.d ./App/Src/uart_device.o ./App/Src/uart_device.su
 
 .PHONY: clean-App-2f-Src
 
