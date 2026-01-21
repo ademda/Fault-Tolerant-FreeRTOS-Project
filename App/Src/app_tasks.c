@@ -4,18 +4,28 @@
  *  Created on: Dec 26, 2025
  *      Author: dalya
  */
-
+#include "main.h"
 #include "app_tasks.h"
 #include "stm32f4xx_hal.h"
+#include "uart_device.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include <stdlib.h>
 #include <string.h>
 #include "mpu6050.h"
-#include "main.h"
+
+#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(10)
+#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(1)
+#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(10)
+#define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
+#define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(50)
+#define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
+#define FAULT_TASK_PERIOD
+
 //COMM PROTOCOLS EXTERNS
 extern UART_HandleTypeDef huart2;
+extern UART_HandleTypeDef huart1;
 extern ADC_HandleTypeDef hadc1;
 extern DMA_HandleTypeDef hdma_adc1;
 
@@ -35,20 +45,23 @@ extern QueueHandle_t uart_receiver_queue;
 extern QueueHandle_t consumer_data_info_queue;
 
 void I2CSensorTaskHandler(void *pvParameters ){
+	TickType_t xLastWakeTime;
 	for (;;){
-		MPU6050_Read_Accel_DMA(&imu);
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		MPU6050_Read_Accel_DMA_Complete(&imu);
+		//MPU6050_Read_Accel_DMA(&imu);
+		MPU6050_Read_Accel(&imu);
+		//ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		//MPU6050_Read_Accel_DMA_Complete(&imu);
 
-		MPU6050_Read_Gyro_DMA(&imu);
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		MPU6050_Read_Gyro_DMA_Complete(&imu);
+		//MPU6050_Read_Gyro_DMA(&imu);
+		//ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		MPU6050_Read_Gyro(&imu);
+		//MPU6050_Read_Gyro_DMA_Complete(&imu);
 		imu_queue_item.pitch = imu.pitch;
 		imu_queue_item.roll = imu.roll;
 		if (xQueueSend(i2c_sensor_queue, (void *)&imu_queue_item, 10) != pdPASS){
 			Error_Handler();
 		}
-	//vTaskDelayUntil()
+		vTaskDelayUntil(&xLastWakeTime, I2C_SENSOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
@@ -56,7 +69,8 @@ void I2CSensorTaskHandler(void *pvParameters ){
 void UARTReceiverTaskHandler(void *pvParameters ){
 	for (;;){
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
-			xQueueSend(uart_receiver_queue, (void *)&uart_rx_buffer, 10);
+			xQueueSend(uart_receiver_queue, (void *)&uart_rx_buffer, UART_FRAME_SIZE);
+			HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
 		}
 		else {
 			Error_Handler();
@@ -66,44 +80,52 @@ void UARTReceiverTaskHandler(void *pvParameters ){
 }
 
 void ADCSensorTaskHandler(void *pvParameters ){
+	TickType_t xLastWakeTime;
 	for (;;){
 		HAL_ADC_Start_DMA(&hadc1, (void *)&lum_value, sizeof(lum_value));
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
-			xQueueSend(adc_sensor_queue, &lum_value, 10);
+			xQueueSend(adc_sensor_queue, (void *)&lum_value, 10);
 		}
 		else {
 			Error_Handler();
 		}
+		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
 void ConsumerTaskHandler(void *pvParameters){
+	TickType_t xLastWakeTime;
 	for (;;){
-
+		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
 void InterfaceTaskHandler(void *pvParameters){
+	TickType_t xLastWakeTime;
 	for (;;){
-
+		vTaskDelayUntil(&xLastWakeTime, INTERFACE_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
 void MonitorTaskHandler(void *pvParameters ){
+	TickType_t xLastWakeTime;
 	for (;;){
-
+		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
 void FlowControlTaskHandler(void *pvParameters ){
+	TickType_t xLastWakeTime;
 	for (;;){
-
+		vTaskDelayUntil(&xLastWakeTime, FLOW_CONTROL_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
 void FaultTaskHandler(void *pvParameters ){
 	for (;;){
-
+		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){
+			Error_Handler();
+		}
 	}
 	vTaskDelete(NULL);
 }

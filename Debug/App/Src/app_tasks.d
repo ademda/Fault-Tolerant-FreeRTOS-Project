@@ -1,5 +1,4 @@
-App/Src/app_tasks.o: ../App/Src/app_tasks.c \
- C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h \
+App/Src/app_tasks.o: ../App/Src/app_tasks.c ../Core/Inc/main.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h \
  ../Core/Inc/stm32f4xx_hal_conf.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_rcc.h \
@@ -33,6 +32,8 @@ App/Src/app_tasks.o: ../App/Src/app_tasks.c \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
+ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h \
+ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/uart_device.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/FreeRTOS.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/FreeRTOSConfig.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/projdefs.h \
@@ -44,9 +45,8 @@ App/Src/app_tasks.o: ../App/Src/app_tasks.c \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/list.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/queue.h \
  C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/task.h \
- C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/mpu6050.h \
- ../Core/Inc/main.h
-C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h:
+ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/mpu6050.h
+../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
 ../Core/Inc/stm32f4xx_hal_conf.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_rcc.h:
@@ -80,6 +80,8 @@ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
+C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/app_tasks.h:
+C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/uart_device.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/FreeRTOS.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/FreeRTOSConfig.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/projdefs.h:
@@ -92,4 +94,3 @@ C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/queue.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/ThirdParty/FreeRTOS/include/task.h:
 C:/Users/dalya/STM32CubeIDE/FreeRTOS_ws/Fault-Tolerant-RTOS/App/Inc/mpu6050.h:
-../Core/Inc/main.h:

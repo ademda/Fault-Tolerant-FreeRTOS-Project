@@ -1,8 +1,8 @@
-../App/Src/app_tasks.c:37:6:I2CSensorTaskHandler	2
-../App/Src/app_tasks.c:56:6:UARTReceiverTaskHandler	2
-../App/Src/app_tasks.c:68:6:ADCSensorTaskHandler	2
-../App/Src/app_tasks.c:80:6:ConsumerTaskHandler	1
-../App/Src/app_tasks.c:86:6:InterfaceTaskHandler	1
-../App/Src/app_tasks.c:92:6:MonitorTaskHandler	1
-../App/Src/app_tasks.c:98:6:FlowControlTaskHandler	1
-../App/Src/app_tasks.c:104:6:FaultTaskHandler	1
+../App/Src/app_tasks.c:47:6:I2CSensorTaskHandler	2
+../App/Src/app_tasks.c:69:6:UARTReceiverTaskHandler	2
+../App/Src/app_tasks.c:82:6:ADCSensorTaskHandler	2
+../App/Src/app_tasks.c:96:6:ConsumerTaskHandler	1
+../App/Src/app_tasks.c:103:6:InterfaceTaskHandler	1
+../App/Src/app_tasks.c:110:6:MonitorTaskHandler	1
+../App/Src/app_tasks.c:117:6:FlowControlTaskHandler	1
+../App/Src/app_tasks.c:124:6:FaultTaskHandler	2

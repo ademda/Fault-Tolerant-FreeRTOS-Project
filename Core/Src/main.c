@@ -157,26 +157,29 @@ int main(void)
   wdog_mutex = xSemaphoreCreateMutex();
 
 
-  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 3, &ADCSensorTask);
+//  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 8, &ADCSensorTask);
+//  configASSERT(create_status == pdPASS);
+
+  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL, 7, &I2CSensorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL, 3, &I2CSensorTask);
-  configASSERT(create_status == pdPASS);
-
-  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 3, &ConsumerTask);
-  configASSERT(create_status == pdPASS);
-
-  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 3, &FlowControlTask);
-  configASSERT(create_status == pdPASS);	  
-
-  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 1, &MonitorTask);
-  configASSERT(create_status == pdPASS);
-
-  create_status = xTaskCreate(InterfaceTaskHandler, "Communication Task", INTERFACE_TASK_STACK_SIZE, NULL, 2, &InterfaceTask);
-  configASSERT(create_status == pdPASS);
-
-  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 0, &FaultHandlerTask);
-  configASSERT(create_status == pdPASS);
+//  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 6, &UARTReceiverTask);
+//  configASSERT(create_status == pdPASS);
+//
+//  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 5, &ConsumerTask);
+//  configASSERT(create_status == pdPASS);
+//
+//  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
+//  configASSERT(create_status == pdPASS);
+//
+//  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
+//  configASSERT(create_status == pdPASS);
+//
+//  create_status = xTaskCreate(InterfaceTaskHandler, "Communication Task", INTERFACE_TASK_STACK_SIZE, NULL, 2, &InterfaceTask);
+//  configASSERT(create_status == pdPASS);
+//
+//  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 1, &FaultHandlerTask);
+//  configASSERT(create_status == pdPASS);
 
 
   vTaskStartScheduler();
@@ -213,12 +216,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 336;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
-  RCC_OscInitStruct.PLL.PLLQ = 7;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -228,12 +226,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
@@ -260,7 +258,7 @@ static void MX_ADC1_Init(void)
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
@@ -403,13 +401,13 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 8, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
   /* DMA1_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 7, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 9, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
