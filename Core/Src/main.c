@@ -63,7 +63,6 @@ DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 DMA_HandleTypeDef hdma_i2c1_rx;
-DMA_HandleTypeDef hdma_i2c1_tx;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -121,6 +120,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   BaseType_t create_status = 0;
+  __HAL_DBGMCU_FREEZE_TIM5();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -148,18 +148,18 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   adc_sensor_queue = xQueueCreate(100, sizeof(float));
-  i2c_sensor_queue = xQueueCreate(100, sizeof(imu_data_t*));
-  uart_receiver_queue = xQueueCreate(100, UART_FRAME_SIZE);
+  i2c_sensor_queue = xQueueCreate(1000, sizeof(imu_data_t*));
+  uart_receiver_queue = xQueueCreate(1000, UART_FRAME_SIZE);
   consumer_data_info_queue = xQueueCreate(100, sizeof(sensor_data_t));
 
   sensor_data_mutex = xSemaphoreCreateMutex();
   dwt_mutex = xSemaphoreCreateMutex();
   wdog_mutex = xSemaphoreCreateMutex();
-
+  MPU6050_Init(&imu);
 
 //  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 8, &ADCSensorTask);
 //  configASSERT(create_status == pdPASS);
-
+//
   create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL, 7, &I2CSensorTask);
   configASSERT(create_status == pdPASS);
 
@@ -339,7 +339,7 @@ static void MX_USART1_UART_Init(void)
 
   /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
-  huart1.Init.BaudRate = 9600;
+  huart1.Init.BaudRate = 115200;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
@@ -401,11 +401,8 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 8, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 7, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
-  /* DMA1_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 7, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 9, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
@@ -419,13 +416,35 @@ static void MX_DMA_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pins : PC5 PC6 PC8 PC9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_8|GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB8 PB9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -442,15 +461,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
-    HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
+    //HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
+    HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);  // UNCOMMENT THIS!
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xTaskNotifyFromISR(UARTReceiverTask, 0, eNoAction, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);  // ADD THIS!
 }
 
-void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c){
-
-}
 
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c){
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;

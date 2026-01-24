@@ -38,6 +38,7 @@ typedef struct{
 	/*	DMA VALS	*/
 	uint8_t accRxBuf[8];
 	uint8_t gyroRxBuf[8];
+	uint8_t imuRxBuf[14];
 	/*	POLLING VALS*/
 	float pitch;
 	float roll;
@@ -77,6 +78,12 @@ void MPU6050_Read_Accel_DMA_Complete(MPU6050_t *imu);
 HAL_StatusTypeDef MPU6050_Read_Gyro_DMA(MPU6050_t *imu);
 
 void MPU6050_Read_Gyro_DMA_Complete(MPU6050_t *imu);
+
+void MPU6050_Read_IMU(MPU6050_t *imu);
+
+HAL_StatusTypeDef MPU6050_Read_IMU_DMA(MPU6050_t *imu);
+
+void MPU6050_Read_IMU_DMA_Complete(MPU6050_t *imu);
 
 HAL_StatusTypeDef MPU6050_ClearInterrupt(MPU6050_t *imu);
 

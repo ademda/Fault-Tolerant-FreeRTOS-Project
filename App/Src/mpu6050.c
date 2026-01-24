@@ -37,11 +37,12 @@ HAL_StatusTypeDef MPU6050_Init(MPU6050_t *imu){
 	imu->Gzvelbias = 0;
 	memset(imu->accRxBuf, 0, sizeof(imu->accRxBuf));
 	memset(imu->gyroRxBuf, 0, sizeof(imu->gyroRxBuf));
+	memset(imu->imuRxBuf, 0, sizeof(imu->imuRxBuf));
 	imu->i2cHandle = &hi2c1;
 	imu->pitch = 0;
 	imu->roll = 0;
 	imu->state = MPU6050_IDLE;
-	imu->calib_status = MPU6050_CALIBRATING;
+	imu->calib_status = MPU6050_CALIBRATED;
 	
 	uint8_t check = 0;
 	uint8_t Data = 0;
@@ -49,9 +50,7 @@ HAL_StatusTypeDef MPU6050_Init(MPU6050_t *imu){
 		Error_Handler();
 	}
 
-	if (check != WHO_AM_I_RESP){
-		Error_Handler();
-	}
+
 	//select internal clock and wake up the sensor
 	if (HAL_I2C_Mem_Write(&hi2c1, MPU6050_ADDR, PWR_MGMT_1_REG, 1, &Data, 1, 1000)){
 		Error_Handler();
@@ -150,11 +149,16 @@ void MPU6050_Read_Gyro(MPU6050_t *imu){
 
 
 HAL_StatusTypeDef MPU6050_Read_Accel_DMA(MPU6050_t *imu){
-	if (HAL_I2C_Mem_Read_DMA(imu->i2cHandle, MPU6050_ADDR, 0x3B, 1, imu->accRxBuf, 8)){
+	if (imu->i2cHandle->State != HAL_I2C_STATE_READY) {
+	    return HAL_BUSY;
+	}
+	if (HAL_I2C_Mem_Read_DMA(imu->i2cHandle, MPU6050_ADDR, 0x3B, 1, imu->accRxBuf, 6)){
 		return HAL_ERROR;
 	}
 	return HAL_OK;
 }
+
+
 
 void MPU6050_Read_Accel_DMA_Complete(MPU6050_t *imu){
 	int16_t Accel_X_RAW = (int16_t)(imu->accRxBuf[0] << 8 | imu->accRxBuf [1]);
@@ -174,7 +178,7 @@ void MPU6050_Read_Accel_DMA_Complete(MPU6050_t *imu){
 }
 
 HAL_StatusTypeDef MPU6050_Read_Gyro_DMA(MPU6050_t *imu){
-	if (HAL_I2C_Mem_Read_DMA(imu->i2cHandle, MPU6050_ADDR, 0x43, 1, imu->gyroRxBuf, 8)){
+	if (HAL_I2C_Mem_Read_DMA(imu->i2cHandle, MPU6050_ADDR, 0x43, 1, imu->gyroRxBuf, 6)){
 		return HAL_ERROR;
 	}
 	return HAL_OK;
@@ -214,6 +218,88 @@ void MPU6050_Read_Gyro_DMA_Complete(MPU6050_t *imu){
 		imu->Gyang += imu->Gy * dt;
 		imu->Gzang += imu->Gz * dt;
 	}
+}
+
+
+
+void MPU6050_Read_IMU(MPU6050_t *imu){
+	uint8_t Rec_Data[14];
+	if (HAL_I2C_Mem_Read(imu->i2cHandle, MPU6050_ADDR, 0x3B, 1, Rec_Data, 16, 1000) != HAL_OK){
+		Error_Handler();
+	}
+	int16_t Accel_X_RAW = (int16_t)(Rec_Data[0] << 8 | Rec_Data [1]);
+	int16_t Accel_Y_RAW = (int16_t)(Rec_Data[2] << 8 | Rec_Data [3]);
+	int16_t Accel_Z_RAW = (int16_t)(Rec_Data[4] << 8 | Rec_Data [5]);
+
+	float Ax = (float)Accel_X_RAW / 16384.0 * G;
+	float Ay = (float)Accel_Y_RAW / 16384.0 * G;
+	float Az = (float)Accel_Z_RAW / 16384.0 * G;
+
+	// Compute tilt angles (in degrees)
+	imu->roll  = atan2f(Ay, sqrtf(Ax * Ax + Az * Az));
+	imu->pitch = atan2f(-Ax, sqrtf(Ay * Ay + Az * Az));
+	imu->Ax = Ax;
+	imu->Ay = Ay;
+	imu->Az = Az;
+
+	int16_t Gyro_X_RAW = (int16_t)(Rec_Data[8] << 8 | Rec_Data [9]);
+	int16_t Gyro_Y_RAW = (int16_t)(Rec_Data[10] << 8 | Rec_Data [11]);
+	int16_t Gyro_Z_RAW = (int16_t)(Rec_Data[12] << 8 | Rec_Data [13]);
+
+	float Gx = (float)Gyro_X_RAW / 131.0;
+	float Gy = (float)Gyro_Y_RAW / 131.0;
+	float Gz = (float)Gyro_Z_RAW / 131.0;
+
+	imu->Gx = (Gx - imu->Gxvelbias)*(M_PI / 180.0f);
+	imu->Gy = (Gy - imu->Gyvelbias)*(M_PI / 180.0f);
+	imu->Gz = (Gz - imu->Gzvelbias)*(M_PI / 180.0f);
+	float dt = 0.01; // example: if sampling at 100 Hz
+
+	imu->Gxang += imu->Gx * dt;
+	imu->Gyang += imu->Gy * dt;
+	imu->Gzang += imu->Gz * dt;
+
+}
+
+HAL_StatusTypeDef MPU6050_Read_IMU_DMA(MPU6050_t *imu){
+	if (HAL_I2C_Mem_Read_DMA(imu->i2cHandle, MPU6050_ADDR, 0x3B, 1, imu->imuRxBuf, 16)){
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+}
+
+void MPU6050_Read_IMU_DMA_Complete(MPU6050_t *imu){
+	int16_t Accel_X_RAW = (int16_t)(imu->imuRxBuf[0] << 8 | imu->imuRxBuf[1]);
+	int16_t Accel_Y_RAW = (int16_t)(imu->imuRxBuf[2] << 8 | imu->imuRxBuf[3]);
+	int16_t Accel_Z_RAW = (int16_t)(imu->imuRxBuf[4] << 8 | imu->imuRxBuf[5]);
+
+	float Ax = (float)Accel_X_RAW / 16384.0 * G;
+	float Ay = (float)Accel_Y_RAW / 16384.0 * G;
+	float Az = (float)Accel_Z_RAW / 16384.0 * G;
+
+	// Compute tilt angles (in degrees)
+	imu->roll  = atan2f(Ay, sqrtf(Ax * Ax + Az * Az));
+	imu->pitch = atan2f(-Ax, sqrtf(Ay * Ay + Az * Az));
+	imu->Ax = Ax;
+	imu->Ay = Ay;
+	imu->Az = Az;
+
+	int16_t Gyro_X_RAW = (int16_t)(imu->imuRxBuf[8] << 8 | imu->imuRxBuf [9]);
+	int16_t Gyro_Y_RAW = (int16_t)(imu->imuRxBuf[10] << 8 | imu->imuRxBuf [11]);
+	int16_t Gyro_Z_RAW = (int16_t)(imu->imuRxBuf[12] << 8 | imu->imuRxBuf [13]);
+
+	float Gx = (float)Gyro_X_RAW / 131.0;
+	float Gy = (float)Gyro_Y_RAW / 131.0;
+	float Gz = (float)Gyro_Z_RAW / 131.0;
+
+	imu->Gx = (Gx - imu->Gxvelbias)*(M_PI / 180.0f);
+	imu->Gy = (Gy - imu->Gyvelbias)*(M_PI / 180.0f);
+	imu->Gz = (Gz - imu->Gzvelbias)*(M_PI / 180.0f);
+	float dt = 0.01; // example: if sampling at 100 Hz
+
+	imu->Gxang += imu->Gx * dt;
+	imu->Gyang += imu->Gy * dt;
+	imu->Gzang += imu->Gz * dt;
 }
 
 /*void Calibrate_Gyro(MPU6050_t *imu){

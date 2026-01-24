@@ -37,44 +37,58 @@ extern DMA_HandleTypeDef hdma_i2c1_tx;
 extern uint16_t lum_value;
 extern MPU6050_t imu;
 extern MPU6050_queue_item_t imu_queue_item;
-extern uint8_t *uart_rx_buffer;
+extern uint8_t uart_rx_buffer[UART_FRAME_SIZE];
+extern char *uart_tx_buffer;
+
 //INTERTASKS COMMUNICATION EXTERNS
 extern QueueHandle_t adc_sensor_queue;
 extern QueueHandle_t i2c_sensor_queue;
 extern QueueHandle_t uart_receiver_queue;
 extern QueueHandle_t consumer_data_info_queue;
 
+// PC9: adc task
+// PC8: I2C task
+// PB8: UART task
+// PC6: Consumer task CH7
+// PB9: Interface task
+// PC5; Montioring task
+
 void I2CSensorTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime;
 	for (;;){
-		//MPU6050_Read_Accel_DMA(&imu);
-		MPU6050_Read_Accel(&imu);
-		//ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		//MPU6050_Read_Accel_DMA_Complete(&imu);
-
-		//MPU6050_Read_Gyro_DMA(&imu);
-		//ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		MPU6050_Read_Gyro(&imu);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
+		MPU6050_Read_IMU_DMA(&imu);
+		//MPU6050_Read_Accel(&imu);
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		MPU6050_Read_IMU_DMA_Complete(&imu);
+		//MPU6050_Read_Gyro(&imu);
 		//MPU6050_Read_Gyro_DMA_Complete(&imu);
+		//MPU6050_Read_IMU(&imu);
 		imu_queue_item.pitch = imu.pitch;
 		imu_queue_item.roll = imu.roll;
 		if (xQueueSend(i2c_sensor_queue, (void *)&imu_queue_item, 10) != pdPASS){
 			Error_Handler();
 		}
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, I2C_SENSOR_TASK_PERIOD_MS);
+
 	}
 	vTaskDelete(NULL);
 }
 
 void UARTReceiverTaskHandler(void *pvParameters ){
+	HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
 	for (;;){
+		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
-			xQueueSend(uart_receiver_queue, (void *)&uart_rx_buffer, UART_FRAME_SIZE);
-			HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
+			//HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
+			HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
+			xQueueSend(uart_receiver_queue, (void *)&uart_rx_buffer, 10);
 		}
 		else {
 			Error_Handler();
 		}
+		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 	}
 	vTaskDelete(NULL);
 }
@@ -82,13 +96,15 @@ void UARTReceiverTaskHandler(void *pvParameters ){
 void ADCSensorTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime;
 	for (;;){
-		HAL_ADC_Start_DMA(&hadc1, (void *)&lum_value, sizeof(lum_value));
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+		HAL_ADC_Start_DMA(&hadc1, (void *)&lum_value, 1);
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
 			xQueueSend(adc_sensor_queue, (void *)&lum_value, 10);
 		}
 		else {
 			Error_Handler();
 		}
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
@@ -96,6 +112,8 @@ void ADCSensorTaskHandler(void *pvParameters ){
 void ConsumerTaskHandler(void *pvParameters){
 	TickType_t xLastWakeTime;
 	for (;;){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
@@ -103,6 +121,8 @@ void ConsumerTaskHandler(void *pvParameters){
 void InterfaceTaskHandler(void *pvParameters){
 	TickType_t xLastWakeTime;
 	for (;;){
+		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, INTERFACE_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
@@ -110,6 +130,8 @@ void InterfaceTaskHandler(void *pvParameters){
 void MonitorTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime;
 	for (;;){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);

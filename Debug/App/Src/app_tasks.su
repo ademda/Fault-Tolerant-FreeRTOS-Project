@@ -1,8 +1,8 @@
-../App/Src/app_tasks.c:47:6:I2CSensorTaskHandler	24	static
-../App/Src/app_tasks.c:69:6:UARTReceiverTaskHandler	24	static
-../App/Src/app_tasks.c:82:6:ADCSensorTaskHandler	32	static
-../App/Src/app_tasks.c:96:6:ConsumerTaskHandler	24	static
-../App/Src/app_tasks.c:103:6:InterfaceTaskHandler	24	static
-../App/Src/app_tasks.c:110:6:MonitorTaskHandler	24	static
-../App/Src/app_tasks.c:117:6:FlowControlTaskHandler	24	static
-../App/Src/app_tasks.c:124:6:FaultTaskHandler	24	static
+../App/Src/app_tasks.c:49:6:I2CSensorTaskHandler	24	static
+../App/Src/app_tasks.c:69:6:UARTReceiverTaskHandler	32	static
+../App/Src/app_tasks.c:84:6:ADCSensorTaskHandler	32	static
+../App/Src/app_tasks.c:98:6:ConsumerTaskHandler	24	static
+../App/Src/app_tasks.c:105:6:InterfaceTaskHandler	24	static
+../App/Src/app_tasks.c:112:6:MonitorTaskHandler	24	static
+../App/Src/app_tasks.c:119:6:FlowControlTaskHandler	24	static
+../App/Src/app_tasks.c:126:6:FaultTaskHandler	24	static

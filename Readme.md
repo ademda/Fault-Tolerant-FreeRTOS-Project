@@ -1,0 +1,2 @@
+https://www.st.com/resource/en/user_manual/um1722-developing-applications-on-stm32cube-with-rtos-stmicroelectronics.pdf
+https://medium.com/nerd-for-tech/hands-on-freertos-on-stm32-mcu-01-producer-consumer-problem-e3cc921e0660
