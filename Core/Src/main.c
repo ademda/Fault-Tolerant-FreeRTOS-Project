@@ -50,6 +50,7 @@
 #define INTERFACE_TASK_STACK_SIZE		1024
 #define FAULT_HANDLER_TASK_STACK_SIZE	1024
 
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -91,7 +92,7 @@ QueueHandle_t consumer_data_info_queue;
 SemaphoreHandle_t dwt_mutex;
 SemaphoreHandle_t wdog_mutex;
 SemaphoreHandle_t sensor_data_mutex;
-
+SemaphoreHandle_t arbitration_mutex;
 
 
 float consumer_raw_data[1000];
@@ -150,13 +151,14 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  adc_sensor_queue = xQueueCreate(100, sizeof(float));
-  i2c_sensor_queue = xQueueCreate(1000, sizeof(imu_data_t*));
-  uart_receiver_queue = xQueueCreate(1000, UART_FRAME_SIZE);
+  adc_sensor_queue = xQueueCreate(ADC_QUEUE_SIZE, sizeof(float));
+  i2c_sensor_queue = xQueueCreate(I2C_QUEUE_SIZE, sizeof(imu_data_t*));
+  uart_receiver_queue = xQueueCreate(UART_QUEUE_SIZE, UART_FRAME_SIZE);
 
   sensor_data_mutex = xSemaphoreCreateMutex();
   dwt_mutex = xSemaphoreCreateMutex();
   wdog_mutex = xSemaphoreCreateMutex();
+  arbitration_mutex = xSemaphoreCreateMutex();
   MPU6050_Init(&imu);
 
   create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 8, &ADCSensorTask);
@@ -171,8 +173,8 @@ int main(void)
   create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 9, &ConsumerTask);
   configASSERT(create_status == pdPASS);
 
-//  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
-//  configASSERT(create_status == pdPASS);
+  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
+  configASSERT(create_status == pdPASS);
 //
 //  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
 //  configASSERT(create_status == pdPASS);
