@@ -66,6 +66,7 @@ DMA_HandleTypeDef hdma_i2c1_rx;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 extern MPU6050_t imu;
@@ -152,7 +153,6 @@ int main(void)
   adc_sensor_queue = xQueueCreate(100, sizeof(float));
   i2c_sensor_queue = xQueueCreate(1000, sizeof(imu_data_t*));
   uart_receiver_queue = xQueueCreate(1000, UART_FRAME_SIZE);
-  consumer_data_info_queue = xQueueCreate(100, sizeof(sensor_data_t));
 
   sensor_data_mutex = xSemaphoreCreateMutex();
   dwt_mutex = xSemaphoreCreateMutex();
@@ -167,17 +167,14 @@ int main(void)
 
   create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 6, &UARTReceiverTask);
   configASSERT(create_status == pdPASS);
-//
-//  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 5, &ConsumerTask);
-//  configASSERT(create_status == pdPASS);
-//
+
+  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 9, &ConsumerTask);
+  configASSERT(create_status == pdPASS);
+
 //  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
 //  configASSERT(create_status == pdPASS);
 //
 //  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
-//  configASSERT(create_status == pdPASS);
-//
-//  create_status = xTaskCreate(InterfaceTaskHandler, "Communication Task", INTERFACE_TASK_STACK_SIZE, NULL, 2, &InterfaceTask);
 //  configASSERT(create_status == pdPASS);
 //
 //  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 1, &FaultHandlerTask);
@@ -405,6 +402,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 7, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
+  /* DMA1_Stream6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 6, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 9, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
@@ -475,6 +475,12 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c){
 	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	vTaskNotifyGiveFromISR(I2CSensorTask, &xHigherPriorityTaskWoken);
 	portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	xTaskNotifyFromISR(ConsumerTask, 0, eNoAction, &xHigherPriorityTaskWoken);
+	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 /* USER CODE END 4 */
 

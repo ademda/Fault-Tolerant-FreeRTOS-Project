@@ -47,16 +47,14 @@ MPU6050_queue_item_t con_imu_queue_item;
 
 //double buffer init
 frame_t frame1;
-frame_t frame2;
 
 frame_t* write_buf = &frame1;
-frame_t* read_buf = &frame2;
+
 
 //INTERTASKS COMMUNICATION EXTERNS
 extern QueueHandle_t adc_sensor_queue;
 extern QueueHandle_t i2c_sensor_queue;
 extern QueueHandle_t uart_receiver_queue;
-extern QueueHandle_t consumer_data_info_queue;
 
 // PC9: adc task CH5
 // PC8: I2C task CH8
@@ -88,7 +86,6 @@ void UARTReceiverTaskHandler(void *pvParameters ){
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
-			//HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
 			HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
 			xQueueSend(uart_receiver_queue, (void *)&uart_rx_buffer, 10);
 		}
@@ -118,33 +115,19 @@ void ADCSensorTaskHandler(void *pvParameters ){
 	}
 	vTaskDelete(NULL);
 }
+
 void ConsumerTaskHandler(void *pvParameters){
-	TickType_t xLastWakeTime = xTaskGetTickCount();
 	for (;;){
 		xQueueReceive(adc_sensor_queue,&con_lum_value, 1);
 		xQueueReceive(uart_receiver_queue,&con_uart_rx_buffer, 5);
 		xQueueReceive(i2c_sensor_queue,&con_imu_queue_item, 1);
-		write_buf->data = con_lum_value;
+		write_buf->data[0] = con_lum_value & 0xFF;
+		write_buf->data[1] = (con_lum_value & 0xFF00) >> 8;
 		write_buf->length = 2;
-
-		frame_t* tmp = write_buf;
-
-		write_buf = read_buf;
-		read_buf = tmp;
-
-		xTaskNotifyGive(InterfaceTask);
-		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
-	}
-	vTaskDelete(NULL);
-}
-void InterfaceTaskHandler(void *pvParameters){
-	TickType_t xLastWakeTime = xTaskGetTickCount();
-	for (;;){
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
-		ulTaskNotifyTake(pdTrue,0);
-		HAL_UART_Transmit(&huart2, read_buf->data, read_buf->length, 10); // will change this to dma/it
-		//vTaskDelayUntil(&xLastWakeTime, INTERFACE_TASK_PERIOD_MS);
+		HAL_UART_Transmit_DMA(&huart2, write_buf->data, write_buf->length);
+		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){
+			Error_Handler();
+		}
 	}
 	vTaskDelete(NULL);
 }
