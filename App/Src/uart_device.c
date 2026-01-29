@@ -9,4 +9,5 @@
 #include <stdint.h>
 
 uint8_t uart_rx_buffer[UART_FRAME_SIZE] = {0};
+uint8_t uart_rx_char;
 char *uart_tx_buffer = "received data";

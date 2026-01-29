@@ -30,7 +30,7 @@
 #define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(20) // minimus 11ms period because conversion takes =10ms
 #define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(10)
 #define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
-#define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(50)
+#define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(25)
 #define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
 #define FAULT_TASK_PERIOD
 
@@ -79,7 +79,10 @@ extern QueueHandle_t uart_receiver_queue;
 // PB9: Interface task
 // PC5; Montioring task
 
-
+//CH1 UART RX
+//CH2 I2C CLK
+//CH3 I2C DATA
+//CH4 UART TX
 static inline uint32_t xorshift32_star(void)
 {
     uint32_t x = rng_state;
@@ -92,7 +95,9 @@ static inline uint32_t xorshift32_star(void)
 }
 
 void I2CSensorTaskHandler(void *pvParameters ){
-	TickType_t xLastWakeTime = xTaskGetTickCount();;
+	  MPU6050_Init(&imu);
+	TickType_t xLastWakeTime = xTaskGetTickCount();
+
 	for (;;){
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
 		MPU6050_Read_IMU_DMA(&imu);
@@ -103,8 +108,8 @@ void I2CSensorTaskHandler(void *pvParameters ){
 		if (xQueueSend(i2c_sensor_queue, (void *)&imu_queue_item, 10) != pdPASS){
 			Error_Handler();
 		}
-		vTaskDelayUntil(&xLastWakeTime, I2C_SENSOR_TASK_PERIOD_MS);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
+		vTaskDelayUntil(&xLastWakeTime, I2C_SENSOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
@@ -130,22 +135,24 @@ void ADCSensorTaskHandler(void *pvParameters ){
 	for (;;){
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
 		HAL_ADC_Start_DMA(&hadc1, (void *)&lum_value, 1);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
+
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
 			xQueueSend(adc_sensor_queue, (void *)&lum_value, 10);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+
 		}
 		else {
 			Error_Handler();
 		}
-		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_MS);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
 
 void ConsumerTaskHandler(void *pvParameters){
+	TickType_t xLastWakeTime = xTaskGetTickCount();
 	for (;;){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
 		xQueueReceive(adc_sensor_queue,&con_lum_value, 1);
 		xQueueReceive(uart_receiver_queue,&con_uart_rx_buffer, 5); //choukouk lahna
 		xQueueReceive(i2c_sensor_queue,&con_imu_queue_item, 1);
@@ -156,32 +163,27 @@ void ConsumerTaskHandler(void *pvParameters){
 			write_buf->length = 2;
 		}
 		else if (arbiter_decision == I2C_OWNERSHIP){
-			write_buf->data[0] = con_imu_queue_item->pitch;
-			write_buf->data[1] = con_imu_queue_item->roll;
+			write_buf->data[0] = con_imu_queue_item.pitch;
+			write_buf->data[1] = con_imu_queue_item.roll;
 			write_buf->length = 2;
 		}
 		else if (arbiter_decision == UART_OWNERSHIP){
 			memcpy(write_buf, con_uart_rx_buffer, UART_FRAME_SIZE);
-			write_buf->length = strlen(con_uart_rx_buffer);
+			write_buf->length = strlen((char *)con_uart_rx_buffer);
 		}
 		xSemaphoreGive(arbitration_mutex);
-		HAL_UART_Transmit_DMA(&huart2, write_buf->data, write_buf->length);
-		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){
+		//HAL_UART_Transmit_DMA(&huart2, (uint8_t *)write_buf->data, write_buf->length);
+		HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
+		/*if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){
 			Error_Handler();
-		}
+		}*/
 	}
 	vTaskDelete(NULL);
 }
 
-void MonitorTaskHandler(void *pvParameters ){
-	TickType_t xLastWakeTime = xTaskGetTickCount();
-	for (;;){
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
-		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_MS);
-	}
-	vTaskDelete(NULL);
-}
+
 void FlowControlTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	uint32_t i2c_sensor_queue_consumption = 0;
@@ -224,6 +226,17 @@ void FlowControlTaskHandler(void *pvParameters ){
 	}
 	vTaskDelete(NULL);
 }
+
+void MonitorTaskHandler(void *pvParameters ){
+	TickType_t xLastWakeTime = xTaskGetTickCount();
+	for (;;){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
+		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_MS);
+	}
+	vTaskDelete(NULL);
+}
+
 void FaultTaskHandler(void *pvParameters ){
 	for (;;){
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){

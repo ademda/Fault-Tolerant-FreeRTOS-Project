@@ -159,18 +159,18 @@ int main(void)
   dwt_mutex = xSemaphoreCreateMutex();
   wdog_mutex = xSemaphoreCreateMutex();
   arbitration_mutex = xSemaphoreCreateMutex();
-  MPU6050_Init(&imu);
 
-  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 8, &ADCSensorTask);
+
+  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 7, &ADCSensorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL, 7, &I2CSensorTask);
+  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL, 6, &I2CSensorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 6, &UARTReceiverTask);
+  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 5, &UARTReceiverTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 9, &ConsumerTask);
+  create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 8, &ConsumerTask);
   configASSERT(create_status == pdPASS);
 
   create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
