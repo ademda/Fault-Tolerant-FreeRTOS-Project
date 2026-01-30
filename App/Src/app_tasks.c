@@ -25,13 +25,12 @@
 #include "queue.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include "mpu6050.h"
 #include "semphr.h"
 
-#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(20) //2MS is the maximum from the frame on the logic analyzer
-#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(5) // minimus 11ms period because conversion takes =10ms
-#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(5)
+#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(2) //2MS is the maximum from the frame on the logic analyzer
+#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(2) // minimus 11ms period because conversion takes =10ms
+#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(2)
 #define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
 #define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(15)
 #define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
@@ -170,42 +169,36 @@ void ConsumerTaskHandler(void *pvParameters){
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
-		xSemaphoreTake(arbitration_mutex, portMAX_DELAY);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
-		production_arbiter_t local_decision = arbiter_decision;
-		xSemaphoreGive(arbitration_mutex);
 		xQueueReceive(adc_sensor_queue,&con_lum_value, 0);
 		xQueueReceive(uart_receiver_queue,con_uart_rx_buffer, 0); //choukouk lahna
 		xQueueReceive(i2c_sensor_queue,&con_imu_queue_item, 0);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+		xSemaphoreTake(arbitration_mutex, portMAX_DELAY);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
-		if (local_decision == ADC_OWNERSHIP){
-//			write_buf->data[0] = con_lum_value & 0xFF;
-//			write_buf->data[1] = (con_lum_value & 0xFF00) >> 8;
-			//write_buf->length = len;
-			//write_buf->length = sprintf((char *)write_buf->data, "ADC: %d\r\n", con_lum_value);
-
+		if (arbiter_decision == ADC_OWNERSHIP){
+			write_buf->data[0] = con_lum_value & 0xFF;
+			write_buf->data[1] = (con_lum_value & 0xFF00) >> 8;
+			write_buf->length = 2;
 			msg = "adc\r\n";
 		}
-		else if (local_decision == I2C_OWNERSHIP){
-//			write_buf->data[0] = con_imu_queue_item.pitch;
-//			write_buf->data[1] = con_imu_queue_item.roll;
-//			write_buf->length = 2;
-			//write_buf->length = sprintf((char *)write_buf->data, "P:%.1f R:%.1f\r\n",con_imu_queue_item.pitch, con_imu_queue_item.roll);
-
+		else if (arbiter_decision == I2C_OWNERSHIP){
+			write_buf->data[0] = con_imu_queue_item.pitch;
+			write_buf->data[1] = con_imu_queue_item.roll;
+			write_buf->length = 2;
 			msg = "I2C\r\n";
 		}
-		else if (local_decision == UART_OWNERSHIP){
-//			memcpy(write_buf, con_uart_rx_buffer, UART_FRAME_SIZE);
-//			write_buf->length = strlen((char *)con_uart_rx_buffer);
+		else if (arbiter_decision == UART_OWNERSHIP){
+			memcpy(write_buf, con_uart_rx_buffer, UART_FRAME_SIZE);
+			write_buf->length = strlen((char *)con_uart_rx_buffer);
 			msg = "uart\r\n";
 		}
 		else {
 			msg = "aaa\r\n";
 		}
+		xSemaphoreGive(arbitration_mutex);
 		//HAL_UART_Transmit_DMA(&huart2, (uint8_t *)write_buf->data, write_buf->length);
 #ifndef FLOW_CONTROL_DEBUG
+
 		//HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
 		//HAL_UART_Transmit(&huart2, (uint8_t *)filler, strlen(filler), 1000);
 		HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), 1000);
