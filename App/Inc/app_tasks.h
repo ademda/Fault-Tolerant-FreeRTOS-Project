@@ -33,10 +33,10 @@ void MonitorTaskHandler(void *pvParameters );
 void FlowControlTaskHandler(void *pvParameters );
 void FaultTaskHandler(void *pvParameters );
 
-typedef struct{
-	uint8_t length;
-	float data[FRAME_SIZE];
-}frame_t;
+typedef struct {
+    uint8_t length;
+    uint8_t data[64]; // Use uint8_t for ASCII/Raw bytes, not float
+} frame_t;
 
 typedef enum {
 	ADC_OWNERSHIP,

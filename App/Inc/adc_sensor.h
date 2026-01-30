@@ -11,10 +11,6 @@
 #include <stdint.h>
 
 
-typedef struct {
-	uint8_t accRxBuf[8];
-	uint8_t gyroRxBuf[8];
-} imu_data_t;
 
 
 #endif /* INC_ADC_SENSOR_H_ */

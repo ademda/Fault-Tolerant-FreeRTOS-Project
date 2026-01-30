@@ -8,6 +8,6 @@
 #ifndef INC_UART_DEVICE_H_
 #define INC_UART_DEVICE_H_
 
-#define UART_FRAME_SIZE 10 //10 bytes
+#define UART_FRAME_SIZE 28 //10 bytes
 
 #endif /* INC_UART_DEVICE_H_ */

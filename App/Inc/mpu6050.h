@@ -65,6 +65,12 @@ typedef struct {
 	float roll;
 } MPU6050_queue_item_t;
 
+typedef struct {
+	uint8_t accRxBuf[8];
+	uint8_t gyroRxBuf[8];
+} imu_data_t;
+
+
 HAL_StatusTypeDef MPU6050_Init(MPU6050_t *imu);
 
 void MPU6050_Read_Accel(MPU6050_t *imu);

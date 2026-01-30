@@ -151,8 +151,8 @@ int main(void)
   MX_USART1_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  adc_sensor_queue = xQueueCreate(ADC_QUEUE_SIZE, sizeof(float));
-  i2c_sensor_queue = xQueueCreate(I2C_QUEUE_SIZE, sizeof(imu_data_t*));
+  adc_sensor_queue = xQueueCreate(ADC_QUEUE_SIZE, sizeof(uint16_t));
+  i2c_sensor_queue = xQueueCreate(I2C_QUEUE_SIZE, sizeof(imu_data_t));
   uart_receiver_queue = xQueueCreate(UART_QUEUE_SIZE, UART_FRAME_SIZE);
 
   sensor_data_mutex = xSemaphoreCreateMutex();
@@ -465,8 +465,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    //HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
-    HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);  // UNCOMMENT THIS!
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xTaskNotifyFromISR(UARTReceiverTask, 0, eNoAction, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);  // ADD THIS!
