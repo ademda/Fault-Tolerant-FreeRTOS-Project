@@ -29,6 +29,7 @@
 #include "semphr.h"
 
 //#define FLOW_CONTROL_DEBUG 1
+#define UART_TASK_DEBUG 1 //i don't have a lot of channels in the logic analyzer so i will use the Flow control task channel for the uart
 
 #define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(30) //2MS is the maximum from the frame on the logic analyzer //2best
 #define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(30) // minimus 11ms period because conversion takes =10ms //2best
@@ -126,19 +127,22 @@ void UARTReceiverTaskHandler(void *pvParameters ){
 	HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
-			//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
-			HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
+			//HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
 			uint8_t local_buffer[UART_FRAME_SIZE] = {0};
 			memcpy(local_buffer, uart_rx_buffer, UART_FRAME_SIZE);
 			xQueueSend(uart_receiver_queue, local_buffer, 0); //choukouk lahna
+			memset(uart_rx_buffer,0, UART_FRAME_SIZE);
 		}
-		else {
+		else{
 			//Error_Handler();
 		}
 		HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
-		//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
 	}
 	vTaskDelete(NULL);
 }
@@ -178,40 +182,29 @@ void ConsumerTaskHandler(void *pvParameters){
 		xSemaphoreTake(arbitration_mutex, portMAX_DELAY);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
 		if (arbiter_decision == ADC_OWNERSHIP){
-//			write_buf->data[0] = con_lum_value & 0xFF;
-//			write_buf->data[1] = (con_lum_value & 0xFF00) >> 8;
-//			write_buf->length = 2;
 			write_buf->length = sprintf((char *)write_buf->data,"ADC: %d\r\n", con_lum_value);
 			msg = "adc\r\n";
 		}
 		else if (arbiter_decision == I2C_OWNERSHIP){
-//			write_buf->data[0] = con_imu_queue_item.pitch;
-//			write_buf->data[1] = con_imu_queue_item.roll;
-//			write_buf->length = 2;
 			write_buf->length = sprintf((char *)write_buf->data,"Roll, %f Pitch: %f\r\n", con_imu_queue_item.pitch, con_imu_queue_item.roll);
 			msg = "I2C\r\n";
 		}
 		else if (arbiter_decision == UART_OWNERSHIP){
+			memset(write_buf->data,0,write_buf->length);
 			memcpy(write_buf->data, con_uart_rx_buffer, UART_FRAME_SIZE);
-			write_buf->length = strlen((char *)con_uart_rx_buffer);
+			strcat(write_buf->data,"\r\n");
+			write_buf->length = strlen((char *)write_buf->data);
 			msg = "uart\r\n";
 		}
 		else {
 			msg = "aaa\r\n";
 		}
 		xSemaphoreGive(arbitration_mutex);
-		//HAL_UART_Transmit_DMA(&huart2, (uint8_t *)write_buf->data, write_buf->length);
 #ifndef FLOW_CONTROL_DEBUG
-
 		HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
-		//HAL_UART_Transmit(&huart2, (uint8_t *)filler, strlen(filler), 1000);
-		//HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), 1000);
 #endif
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
-		/*if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){
-			Error_Handler();
-		}*/
 	}
 	vTaskDelete(NULL);
 }
@@ -227,7 +220,9 @@ void FlowControlTaskHandler(void *pvParameters ){
 	uint32_t adc_sensor_queue_ratio = 0;
 	char *debug = "debug";
 	for (;;){
+#ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+#endif
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 		i2c_sensor_queue_consumption = uxQueueMessagesWaiting(i2c_sensor_queue);
 		adc_sensor_queue_consumption = uxQueueMessagesWaiting(adc_sensor_queue);
@@ -236,10 +231,14 @@ void FlowControlTaskHandler(void *pvParameters ){
 		adc_sensor_queue_ratio = adc_sensor_queue_consumption/ADC_QUEUE_SIZE;
 		uart_receiver_queue_ratio = uart_receiver_queue_consumption / UART_QUEUE_SIZE;
 		uint16_t random_ticket = xorshift32_star();
+#ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
+#endif
 		xSemaphoreTake(arbitration_mutex, portMAX_DELAY);
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
+#ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+#endif
 		if(i2c_sensor_queue_ratio >= I2C_MAX_CONSUMPTION_RATIO){
 			arbiter_decision = I2C_OWNERSHIP;
 #ifdef FLOW_CONTROL_DEBUG
@@ -285,7 +284,9 @@ void FlowControlTaskHandler(void *pvParameters ){
 			}
 		}
 		xSemaphoreGive(arbitration_mutex);
+#ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
+#endif
 		vTaskDelayUntil(&xLastWakeTime, FLOW_CONTROL_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
