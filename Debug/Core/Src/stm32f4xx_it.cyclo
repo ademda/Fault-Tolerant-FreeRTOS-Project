@@ -5,7 +5,7 @@
 ../Core/Src/stm32f4xx_it.c:134:6:UsageFault_Handler	1
 ../Core/Src/stm32f4xx_it.c:149:6:DebugMon_Handler	1
 ../Core/Src/stm32f4xx_it.c:169:6:DMA1_Stream0_IRQHandler	1
-../Core/Src/stm32f4xx_it.c:183:6:DMA1_Stream6_IRQHandler	1
-../Core/Src/stm32f4xx_it.c:197:6:USART1_IRQHandler	1
+../Core/Src/stm32f4xx_it.c:183:6:USART1_IRQHandler	1
+../Core/Src/stm32f4xx_it.c:197:6:USART2_IRQHandler	1
 ../Core/Src/stm32f4xx_it.c:211:6:TIM5_IRQHandler	1
 ../Core/Src/stm32f4xx_it.c:225:6:DMA2_Stream0_IRQHandler	1

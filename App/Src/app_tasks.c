@@ -31,9 +31,9 @@
 //#define FLOW_CONTROL_DEBUG 1
 #define UART_TASK_DEBUG 1 //i don't have a lot of channels in the logic analyzer so i will use the Flow control task channel for the uart
 
-#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(30) //2MS is the maximum from the frame on the logic analyzer //2best
-#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(30) // minimus 11ms period because conversion takes =10ms //2best
-#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(10)
+#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(3) //2MS is the maximum from the frame on the logic analyzer //2best //30
+#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(2) // minimus 11ms period because conversion takes =10ms //2best //30
+#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(3) //10
 #define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
 #define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(15)
 #define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
@@ -78,12 +78,12 @@ extern QueueHandle_t adc_sensor_queue;
 extern QueueHandle_t i2c_sensor_queue;
 extern QueueHandle_t uart_receiver_queue;
 
-// PC9: adc task CH5
+// PC9: adc task CH1
 // PC8: I2C task CH8
 // PB8: IDLE task CH6
 // PC6: Consumer task CH7
 // PB9: Interface task
-// PC5; FLOW control task
+// PC5; FLOW control task/ UART
 
 //CH1 UART RX
 //CH2 I2C CLK
@@ -160,6 +160,7 @@ void ADCSensorTaskHandler(void *pvParameters ){
 			xQueueSend(adc_sensor_queue, (void *)&lum_value, 0);
 		}
 		else {
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
 			//Error_Handler();
 		}
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
@@ -192,7 +193,7 @@ void ConsumerTaskHandler(void *pvParameters){
 		else if (arbiter_decision == UART_OWNERSHIP){
 			memset(write_buf->data,0,write_buf->length);
 			memcpy(write_buf->data, con_uart_rx_buffer, UART_FRAME_SIZE);
-			strcat(write_buf->data,"\r\n");
+			strcat((char *)write_buf->data,"\r\n");
 			write_buf->length = strlen((char *)write_buf->data);
 			msg = "uart\r\n";
 		}
@@ -201,10 +202,15 @@ void ConsumerTaskHandler(void *pvParameters){
 		}
 		xSemaphoreGive(arbitration_mutex);
 #ifndef FLOW_CONTROL_DEBUG
-		HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
-#endif
+		//HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
+		//HAL_UART_Transmit_DMA(&huart1, write_buf->data, write_buf->length);
+		HAL_UART_Transmit_IT(&huart2, write_buf->data, write_buf->length);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
-		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
+		xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
+#endif
+
+		//vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
 	}
 	vTaskDelete(NULL);
 }
