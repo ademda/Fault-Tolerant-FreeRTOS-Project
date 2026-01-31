@@ -35,7 +35,7 @@ void FaultTaskHandler(void *pvParameters );
 
 typedef struct {
     uint8_t length;
-    uint8_t data[64]; // Use uint8_t for ASCII/Raw bytes, not float
+    uint8_t data[64];
 } frame_t;
 
 typedef enum {

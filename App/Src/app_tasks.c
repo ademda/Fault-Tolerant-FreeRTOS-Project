@@ -14,7 +14,6 @@
  * having that ticket number will get the bus ownership
 */
 
-//#define FLOW_CONTROL_DEBUG 1
 
 #include "main.h"
 #include "app_tasks.h"
@@ -25,12 +24,15 @@
 #include "queue.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "mpu6050.h"
 #include "semphr.h"
 
-#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(2) //2MS is the maximum from the frame on the logic analyzer
-#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(2) // minimus 11ms period because conversion takes =10ms
-#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(2)
+//#define FLOW_CONTROL_DEBUG 1
+
+#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(2) //2MS is the maximum from the frame on the logic analyzer //2best
+#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(3) // minimus 11ms period because conversion takes =10ms //2best
+#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(4)
 #define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
 #define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(15)
 #define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
@@ -176,19 +178,21 @@ void ConsumerTaskHandler(void *pvParameters){
 		xSemaphoreTake(arbitration_mutex, portMAX_DELAY);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
 		if (arbiter_decision == ADC_OWNERSHIP){
-			write_buf->data[0] = con_lum_value & 0xFF;
-			write_buf->data[1] = (con_lum_value & 0xFF00) >> 8;
-			write_buf->length = 2;
+//			write_buf->data[0] = con_lum_value & 0xFF;
+//			write_buf->data[1] = (con_lum_value & 0xFF00) >> 8;
+//			write_buf->length = 2;
+			write_buf->length = sprintf((char *)write_buf->data,"ADC: %d\r\n", con_lum_value);
 			msg = "adc\r\n";
 		}
 		else if (arbiter_decision == I2C_OWNERSHIP){
-			write_buf->data[0] = con_imu_queue_item.pitch;
-			write_buf->data[1] = con_imu_queue_item.roll;
-			write_buf->length = 2;
+//			write_buf->data[0] = con_imu_queue_item.pitch;
+//			write_buf->data[1] = con_imu_queue_item.roll;
+//			write_buf->length = 2;
+			write_buf->length = sprintf((char *)write_buf->data,"Roll, %f Pitch: %f\r\n", con_imu_queue_item.pitch, con_imu_queue_item.roll);
 			msg = "I2C\r\n";
 		}
 		else if (arbiter_decision == UART_OWNERSHIP){
-			memcpy(write_buf, con_uart_rx_buffer, UART_FRAME_SIZE);
+			memcpy(write_buf->data, con_uart_rx_buffer, UART_FRAME_SIZE);
 			write_buf->length = strlen((char *)con_uart_rx_buffer);
 			msg = "uart\r\n";
 		}
@@ -199,9 +203,9 @@ void ConsumerTaskHandler(void *pvParameters){
 		//HAL_UART_Transmit_DMA(&huart2, (uint8_t *)write_buf->data, write_buf->length);
 #ifndef FLOW_CONTROL_DEBUG
 
-		//HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
+		HAL_UART_Transmit(&huart2, (uint8_t *)write_buf->data, write_buf->length, 1000);
 		//HAL_UART_Transmit(&huart2, (uint8_t *)filler, strlen(filler), 1000);
-		HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), 1000);
+		//HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), 1000);
 #endif
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
