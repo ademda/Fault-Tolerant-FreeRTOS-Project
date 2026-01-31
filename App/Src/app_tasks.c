@@ -30,9 +30,9 @@
 
 //#define FLOW_CONTROL_DEBUG 1
 
-#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(2) //2MS is the maximum from the frame on the logic analyzer //2best
-#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(3) // minimus 11ms period because conversion takes =10ms //2best
-#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(4)
+#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(30) //2MS is the maximum from the frame on the logic analyzer //2best
+#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(30) // minimus 11ms period because conversion takes =10ms //2best
+#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(10)
 #define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
 #define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(15)
 #define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
