@@ -30,6 +30,7 @@
 #include "mpu6050.h"
 #include "uart_device.h"
 #include "app_tasks.h"
+#include "event_groups.h"
 #include <string.h>
 /* USER CODE END Includes */
 
@@ -49,7 +50,7 @@
 #define CONSUMER_TASK_STACK_SIZE		1024
 #define INTERFACE_TASK_STACK_SIZE		1024
 #define FAULT_HANDLER_TASK_STACK_SIZE	1024
-
+#define WATCHDOG_TASK_STACK_SIZE		1024
 
 /* USER CODE END PD */
 
@@ -64,6 +65,8 @@ DMA_HandleTypeDef hdma_adc1;
 
 I2C_HandleTypeDef hi2c1;
 DMA_HandleTypeDef hdma_i2c1_rx;
+
+IWDG_HandleTypeDef hiwdg;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -81,12 +84,14 @@ TaskHandle_t FlowControlTask;
 TaskHandle_t MonitorTask;
 TaskHandle_t InterfaceTask;
 TaskHandle_t FaultHandlerTask;
+TaskHandle_t WatchDogTask;
 
 QueueHandle_t adc_sensor_queue;
 QueueHandle_t i2c_sensor_queue;
 QueueHandle_t uart_receiver_queue;
 QueueHandle_t consumer_data_info_queue;
 
+EventGroupHandle_t wdog_event_group;
 
 SemaphoreHandle_t dwt_mutex;
 SemaphoreHandle_t wdog_mutex;
@@ -105,6 +110,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_IWDG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -149,6 +155,7 @@ int main(void)
   MX_ADC1_Init();
   MX_USART1_UART_Init();
   MX_I2C1_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   adc_sensor_queue = xQueueCreate(ADC_QUEUE_SIZE, sizeof(uint16_t));
   i2c_sensor_queue = xQueueCreate(I2C_QUEUE_SIZE, sizeof(imu_data_t));
@@ -158,6 +165,8 @@ int main(void)
   dwt_mutex = xSemaphoreCreateMutex();
   wdog_mutex = xSemaphoreCreateMutex();
   arbitration_mutex = xSemaphoreCreateMutex();
+
+  wdog_event_group =  xEventGroupCreate();
   MPU6050_Init(&imu);
 
   create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 7, &ADCSensorTask);
@@ -175,11 +184,14 @@ int main(void)
   create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
   configASSERT(create_status == pdPASS);
 //
-//  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
-//  configASSERT(create_status == pdPASS);
-//
-//  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 1, &FaultHandlerTask);
-//  configASSERT(create_status == pdPASS);
+  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
+  configASSERT(create_status == pdPASS);
+
+  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 2, &WatchDogTask);
+  configASSERT(create_status == pdPASS);
+
+  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 1, &FaultHandlerTask);
+  configASSERT(create_status == pdPASS);
 
 
   vTaskStartScheduler();
@@ -213,9 +225,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -320,6 +333,34 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief IWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
+
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
+
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_8;
+  hiwdg.Init.Reload = 4095;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
+
+  /* USER CODE END IWDG_Init 2 */
 
 }
 

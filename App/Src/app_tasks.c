@@ -27,19 +27,41 @@
 #include <stdio.h>
 #include "mpu6050.h"
 #include "semphr.h"
+#include "event_groups.h"
 
 //#define FLOW_CONTROL_DEBUG 1
 #define UART_TASK_DEBUG 1 //i don't have a lot of channels in the logic analyzer so i will use the Flow control task channel for the uart
 
-#define I2C_SENSOR_TASK_PERIOD_MS 	pdMS_TO_TICKS(3) //2MS is the maximum from the frame on the logic analyzer //2best //30
-#define ADC_SENSOR_TASK_PERIOD_MS	pdMS_TO_TICKS(2) // minimus 11ms period because conversion takes =10ms //2best //30
-#define CONSUMER_TASK_PERIOD_MS		pdMS_TO_TICKS(3) //10
-#define INTERFACE_TASK_PERIOD_MS	pdMS_TO_TICKS(10)
-#define FLOW_CONTROL_TASK_PERIOD_MS	pdMS_TO_TICKS(15)
-#define MONITOR_TASK_PERIOD_MS		pdMS_TO_TICKS(100)
-#define FAULT_TASK_PERIOD
+#define I2C_SENSOR_TASK_PERIOD_MS	3 //2MS is the maximum from the frame on the logic analyzer //2best //30
+#define ADC_SENSOR_TASK_PERIOD_MS	2 // minimus 11ms period because conversion takes =10ms //2best //30
+#define CONSUMER_TASK_PERIOD_MS		3
+#define FLOW_CONTROL_TASK_PERIOD_MS	15
+#define MONITOR_TASK_PERIOD_MS		100
+#define FAULT_TASK_PERIOD_MS		15
+#define WATCHDOG_TASK_PERIOD_MS		10
 
+#define I2C_SENSOR_TASK_PERIOD_TICKS 	pdMS_TO_TICKS(I2C_SENSOR_TASK_PERIOD_MS) //2MS is the maximum from the frame on the logic analyzer //2best //30
+#define ADC_SENSOR_TASK_PERIOD_TICKS	pdMS_TO_TICKS(ADC_SENSOR_TASK_PERIOD_MS) // minimus 11ms period because conversion takes =10ms //2best //30
+#define CONSUMER_TASK_PERIOD_TICKS		pdMS_TO_TICKS(CONSUMER_TASK_PERIOD_MS) //10
+#define FLOW_CONTROL_TASK_PERIOD_TICKS	pdMS_TO_TICKS(FLOW_CONTROL_TASK_PERIOD_MS)
+#define MONITOR_TASK_PERIOD_TICKS		pdMS_TO_TICKS(MONITOR_TASK_PERIOD_MS)
+#define FAULT_TASK_PERIOD_TICKS			pdMS_TO_TICKS(FAULT_TASK_PERIOD_MS)
+#define WATCHDOG_TASK_PERIOD_TICKS		pdMS_TO_TICKS(WATCHDOG_TASK_PERIOD_MS)
 
+#define ADC_TASK_DEADLINE			ADC_SENSOR_TASK_PERIOD_MS + 2
+#define I2C_TASK_DEADLINE			I2C_SENSOR_TASK_PERIOD_MS + 2
+#define FLOW_CONTROL_TASK_DEADLINE  FLOW_CONTROL_TASK_PERIOD_MS + 10
+#define MONITOR_TASK_DEADLINE		MONITOR_TASK_PERIOD_MS + 20
+
+#define ADC_TASK_BIT			0
+#define I2C_TASK_BIT			1
+#define FLOW_CONTROL_TASK_BIT	2
+#define MONITOR_TASK_BIT		3
+
+#define BIT_0	1 << 0 //adc bit
+#define BIT_1	1 << 1 //i2c bit
+#define BIT_2	1 << 2 //flow control bit
+#define BIT_3	1 << 3 //monitor bit
 //COMM PROTOCOLS EXTERNS
 extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart1;
@@ -49,7 +71,7 @@ extern DMA_HandleTypeDef hdma_adc1;
 extern I2C_HandleTypeDef hi2c1;
 extern DMA_HandleTypeDef hdma_i2c1_rx;
 extern DMA_HandleTypeDef hdma_i2c1_tx;
-
+extern IWDG_HandleTypeDef hiwdg;
 //SENSORS DATA EXTERNS
 extern uint16_t lum_value;
 extern MPU6050_t imu;
@@ -57,6 +79,17 @@ extern MPU6050_queue_item_t imu_queue_item;
 extern uint8_t uart_rx_buffer[UART_FRAME_SIZE];
 extern uint8_t uart_rx_char;
 extern char *uart_tx_buffer;
+
+//SEMAPHORES and MUTEXES
+extern SemaphoreHandle_t arbitration_mutex;
+
+//EVENT GROUPS
+extern EventGroupHandle_t wdog_event_group;
+
+//INTERTASKS COMMUNICATION EXTERNS
+extern QueueHandle_t adc_sensor_queue;
+extern QueueHandle_t i2c_sensor_queue;
+extern QueueHandle_t uart_receiver_queue;
 
 //consumer task internal variales
 uint16_t con_lum_value;
@@ -70,20 +103,26 @@ frame_t frame1;
 production_arbiter_t arbiter_decision = ADC_OWNERSHIP;
 frame_t* write_buf = &frame1;
 
-//SEMAPHORES and MUTEXES
-extern SemaphoreHandle_t arbitration_mutex;
 
-//INTERTASKS COMMUNICATION EXTERNS
-extern QueueHandle_t adc_sensor_queue;
-extern QueueHandle_t i2c_sensor_queue;
-extern QueueHandle_t uart_receiver_queue;
+typedef struct {
+	EventBits_t bit;
+	TickType_t lastTick;
+	TickType_t deadline;
+}wdog_task_t;
+
+wdog_task_t wdog_task [] = {
+	{ADC_TASK_BIT, 0, ADC_TASK_DEADLINE},
+	{I2C_TASK_BIT, 0, I2C_TASK_DEADLINE},
+	{FLOW_CONTROL_TASK_BIT, 0, FLOW_CONTROL_TASK_DEADLINE},
+	{MONITOR_TASK_BIT, 0, MONITOR_TASK_DEADLINE}
+};
 
 // PC9: adc task CH1
 // PC8: I2C task CH8
 // PB8: IDLE task CH6
 // PC6: Consumer task CH7
 // PB9: Interface task
-// PC5; FLOW control task/ UART
+// PC5; FLOW control task / UART
 
 //CH1 UART RX
 //CH2 I2C CLK
@@ -106,6 +145,7 @@ void I2CSensorTaskHandler(void *pvParameters ){
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
+
 		MPU6050_Read_IMU_DMA(&imu);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -117,8 +157,9 @@ void I2CSensorTaskHandler(void *pvParameters ){
 		if (xQueueSend(i2c_sensor_queue, (void *)&imu_queue_item, 0) != pdPASS){
 			//Error_Handler();
 		}
+		xEventGroupSetBits(wdog_event_group, BIT_1);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
-		vTaskDelayUntil(&xLastWakeTime, I2C_SENSOR_TASK_PERIOD_MS);
+		vTaskDelayUntil(&xLastWakeTime, I2C_SENSOR_TASK_PERIOD_TICKS);
 	}
 	vTaskDelete(NULL);
 }
@@ -163,14 +204,14 @@ void ADCSensorTaskHandler(void *pvParameters ){
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
 			//Error_Handler();
 		}
+		xEventGroupSetBits(wdog_event_group, BIT_0);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
-		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_MS);
+		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_TICKS);
 	}
 	vTaskDelete(NULL);
 }
 
 void ConsumerTaskHandler(void *pvParameters){
-	TickType_t xLastWakeTime = xTaskGetTickCount();
 	char *msg ="idle\n";
 	char *filler ="\r\n";
 	for (;;){
@@ -293,16 +334,19 @@ void FlowControlTaskHandler(void *pvParameters ){
 #ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
 #endif
-		vTaskDelayUntil(&xLastWakeTime, FLOW_CONTROL_TASK_PERIOD_MS);
+		xEventGroupSetBits(wdog_event_group, BIT_2);
+		vTaskDelayUntil(&xLastWakeTime, FLOW_CONTROL_TASK_PERIOD_TICKS);
 	}
 	vTaskDelete(NULL);
 }
 
+
+
 void MonitorTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	for (;;){
-
-		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_MS);
+		xEventGroupSetBits(wdog_event_group, BIT_3);
+		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_TICKS);
 	}
 	vTaskDelete(NULL);
 }
@@ -312,6 +356,43 @@ void FaultTaskHandler(void *pvParameters ){
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) != pdPASS){
 			Error_Handler();
 		}
+	}
+	vTaskDelete(NULL);
+}
+
+void WatchDogTaskHandler(void* pvParameters){
+	TickType_t xLastWakeTime = xTaskGetTickCount();
+	EventGroupHandle_t uxBits;
+	TickType_t now;
+	for(;;){
+		now = xTaskGetTickCount();
+		uxBits = xEventGroupWaitBits(wdog_event_group, BIT_0 | BIT_1 | BIT_2 | BIT_3,
+				pdTRUE,pdFALSE,portMAX_DELAY);
+		if ( (uxBits & BIT_0) !=0 ){
+			//adc
+			if (now - wdog_task[0].lastTick >wdog_task[0].deadline){
+
+			}
+		}
+		else if ( (uxBits & BIT_1) !=0 ){
+			if (now - wdog_task[1].lastTick >wdog_task[1].deadline){
+
+			}
+			//i2c
+		}
+		else if ( (uxBits & BIT_2) !=0 ){
+			if (now - wdog_task[2].lastTick >wdog_task[2].deadline){
+
+			}
+			//flow control
+		}
+		else if ( (uxBits & BIT_3) !=0 ){
+			if (now - wdog_task[3].lastTick >wdog_task[3].deadline){
+
+			}
+			//monitor
+		}
+		HAL_IWDG_Refresh(&hiwdg);
 	}
 	vTaskDelete(NULL);
 }

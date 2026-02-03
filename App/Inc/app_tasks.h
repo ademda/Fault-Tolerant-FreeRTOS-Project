@@ -5,8 +5,13 @@
  *      Author: dalya
  */
 
+
+
 #ifndef INC_APP_TASKS_H_
 #define INC_APP_TASKS_H_
+
+//#include "event_groups.h"
+#include "FreeRTOS.h"
 
 #define FRAME_SIZE	10
 
@@ -32,6 +37,7 @@ void ConsumerTaskHandler(void *pvParameters);
 void MonitorTaskHandler(void *pvParameters );
 void FlowControlTaskHandler(void *pvParameters );
 void FaultTaskHandler(void *pvParameters );
+void WatchDogTaskHandler(void* pvParameters);
 
 typedef struct {
     uint8_t length;
@@ -43,5 +49,6 @@ typedef enum {
 	UART_OWNERSHIP,
 	I2C_OWNERSHIP
 }production_arbiter_t;
+
 
 #endif /* INC_APP_TASKS_H_ */
