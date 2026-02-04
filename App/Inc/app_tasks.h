@@ -30,6 +30,15 @@
 #define UART_MAX_CONSUMPTION_RATIO	0.6
 #define I2C_MAX_CONSUMPTION_RATIO	0.65
 
+#define ADC_SENSOR_TASK_STACK_SIZE		1024
+#define I2C_SENSOR_TASK_STACK_SIZE		1024
+#define UART_RECEIVER_TASK_STACK_SIZE	1024
+#define FLOW_CONTROL_TASK_STACK_SIZE	1024
+#define MONITOR_TASK_STACK_SIZE			1024
+#define CONSUMER_TASK_STACK_SIZE		1024
+#define FAULT_HANDLER_TASK_STACK_SIZE	1024
+#define WATCHDOG_TASK_STACK_SIZE		1024
+
 void I2CSensorTaskHandler(void *pvParameters );
 void UARTReceiverTaskHandler(void *pvParameters );
 void ADCSensorTaskHandler(void *pvParameters );
@@ -50,5 +59,10 @@ typedef enum {
 	I2C_OWNERSHIP
 }production_arbiter_t;
 
-
+typedef struct {
+	uint8_t adc;
+	uint8_t i2c;
+	uint8_t flow_control;
+	uint8_t monitoring;
+}task_deadline_counter_t;
 #endif /* INC_APP_TASKS_H_ */

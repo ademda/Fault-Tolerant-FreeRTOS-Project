@@ -42,15 +42,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define ADC_SENSOR_TASK_STACK_SIZE		1024
-#define I2C_SENSOR_TASK_STACK_SIZE		1024
-#define UART_RECEIVER_TASK_STACK_SIZE	1024
-#define FLOW_CONTROL_TASK_STACK_SIZE	1024
-#define MONITOR_TASK_STACK_SIZE			1024
-#define CONSUMER_TASK_STACK_SIZE		1024
-#define INTERFACE_TASK_STACK_SIZE		1024
-#define FAULT_HANDLER_TASK_STACK_SIZE	1024
-#define WATCHDOG_TASK_STACK_SIZE		1024
+
 
 /* USER CODE END PD */
 
@@ -82,7 +74,6 @@ TaskHandle_t UARTReceiverTask;
 TaskHandle_t ConsumerTask;
 TaskHandle_t FlowControlTask;
 TaskHandle_t MonitorTask;
-TaskHandle_t InterfaceTask;
 TaskHandle_t FaultHandlerTask;
 TaskHandle_t WatchDogTask;
 
@@ -93,11 +84,14 @@ QueueHandle_t consumer_data_info_queue;
 
 EventGroupHandle_t wdog_event_group;
 
-SemaphoreHandle_t dwt_mutex;
-SemaphoreHandle_t wdog_mutex;
-SemaphoreHandle_t sensor_data_mutex;
 SemaphoreHandle_t arbitration_mutex;
-
+SemaphoreHandle_t i2c_stack_usage_mutex;
+SemaphoreHandle_t adc_stack_usage_mutex;
+SemaphoreHandle_t uart_stack_usage_mutex;
+SemaphoreHandle_t consumer_stack_usage_mutex;
+SemaphoreHandle_t flow_control_stack_usage_mutex;
+SemaphoreHandle_t fault_handler_stack_usage_mutex;
+SemaphoreHandle_t watchdog_stack_usage_mutex;
 
 float consumer_raw_data[1000];
 /* USER CODE END PV */
@@ -161,10 +155,15 @@ int main(void)
   i2c_sensor_queue = xQueueCreate(I2C_QUEUE_SIZE, sizeof(imu_data_t));
   uart_receiver_queue = xQueueCreate(UART_QUEUE_SIZE, UART_FRAME_SIZE);
 
-  sensor_data_mutex = xSemaphoreCreateMutex();
-  dwt_mutex = xSemaphoreCreateMutex();
-  wdog_mutex = xSemaphoreCreateMutex();
   arbitration_mutex = xSemaphoreCreateMutex();
+  i2c_stack_usage_mutex = xSemaphoreCreateMutex();
+  adc_stack_usage_mutex = xSemaphoreCreateMutex();
+  uart_stack_usage_mutex = xSemaphoreCreateMutex();
+  consumer_stack_usage_mutex = xSemaphoreCreateMutex();
+  flow_control_stack_usage_mutex = xSemaphoreCreateMutex();
+  monitor_usage_mutex = xSemaphoreCreateMutex();
+  fault_handler_stack_usage_mutex = xSemaphoreCreateMutex();
+  watchdog_stack_usage_mutex = xSemaphoreCreateMutex();
 
   wdog_event_group =  xEventGroupCreate();
   MPU6050_Init(&imu);
@@ -187,10 +186,10 @@ int main(void)
   create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 2, &WatchDogTask);
+  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 9, &WatchDogTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL, 1, &FaultHandlerTask);
+  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL,2, &FaultHandlerTask);
   configASSERT(create_status == pdPASS);
 
 
