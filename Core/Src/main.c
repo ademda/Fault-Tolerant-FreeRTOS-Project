@@ -93,6 +93,7 @@ SemaphoreHandle_t flow_control_stack_usage_mutex;
 SemaphoreHandle_t fault_handler_stack_usage_mutex;
 SemaphoreHandle_t watchdog_stack_usage_mutex;
 SemaphoreHandle_t monitor_stack_usage_mutex;
+SemaphoreHandle_t usart2_mutex;
 
 float consumer_raw_data[1000];
 /* USER CODE END PV */
@@ -187,11 +188,11 @@ int main(void)
 //  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
 //  configASSERT(create_status == pdPASS);
 //
-//  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 9, &WatchDogTask);
-//  configASSERT(create_status == pdPASS);
+  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 2, &WatchDogTask);
+  configASSERT(create_status == pdPASS);
 //
-//  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL,2, &FaultHandlerTask);
-//  configASSERT(create_status == pdPASS);
+  create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL,9, &FaultHandlerTask);
+  configASSERT(create_status == pdPASS);
 
 
   vTaskStartScheduler();

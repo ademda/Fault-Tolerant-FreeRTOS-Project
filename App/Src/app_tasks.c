@@ -31,12 +31,13 @@
 
 //#define FLOW_CONTROL_DEBUG 1
 #define UART_TASK_DEBUG 1 //i don't have a lot of channels in the logic analyzer so i will use the Flow control task channel for the uart
+#define FAULT_TASK_DEBUG 1
 
 #define I2C_SENSOR_TASK_PERIOD_MS	3 //2MS is the maximum from the frame on the logic analyzer //2best //30
 #define ADC_SENSOR_TASK_PERIOD_MS	2 // minimus 11ms period because conversion takes =10ms //2best //30
 #define CONSUMER_TASK_PERIOD_MS		3
 #define FLOW_CONTROL_TASK_PERIOD_MS	15
-#define MONITOR_TASK_PERIOD_MS		100
+#define MONITOR_TASK_PERIOD_MS		500
 #define FAULT_TASK_PERIOD_MS		15
 #define WATCHDOG_TASK_PERIOD_MS		10
 
@@ -49,8 +50,8 @@
 #define WATCHDOG_TASK_PERIOD_TICKS		pdMS_TO_TICKS(WATCHDOG_TASK_PERIOD_MS)
 
 #define ADC_TASK_DEADLINE			ADC_SENSOR_TASK_PERIOD_MS + 2
-#define I2C_TASK_DEADLINE			I2C_SENSOR_TASK_PERIOD_MS + 2
-#define FLOW_CONTROL_TASK_DEADLINE  FLOW_CONTROL_TASK_PERIOD_MS + 10
+#define I2C_TASK_DEADLINE			1 //I2C_SENSOR_TASK_PERIOD_MS + 50
+#define FLOW_CONTROL_TASK_DEADLINE  1 //FLOW_CONTROL_TASK_PERIOD_MS + 10
 #define MONITOR_TASK_DEADLINE		MONITOR_TASK_PERIOD_MS + 20
 
 #define ADC_TASK_BIT			0
@@ -104,8 +105,14 @@ extern QueueHandle_t i2c_sensor_queue;
 extern QueueHandle_t uart_receiver_queue;
 
 //Fault Handler task handle
+extern TaskHandle_t I2CSensorTask;
+extern TaskHandle_t ADCSensorTask;
+extern TaskHandle_t UARTReceiverTask;
+extern TaskHandle_t ConsumerTask;
+extern TaskHandle_t FlowControlTask;
+extern TaskHandle_t MonitorTask;
 extern TaskHandle_t FaultHandlerTask;
-
+extern TaskHandle_t WatchDogTask;
 //consumer task internal variales
 uint16_t con_lum_value;
 uint8_t con_uart_rx_buffer[UART_FRAME_SIZE];
@@ -119,26 +126,20 @@ production_arbiter_t arbiter_decision = ADC_OWNERSHIP;
 frame_t* write_buf = &frame1;
 char* overflow_msg = "stack overflowed watchdog will reset system\r\n";
 //stack usage variables
-configSTACK_DEPTH_TYPE uxI2CTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxUARTTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxADCTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxConsumerTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxFlowControlTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxMonitorTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxFaultHandlerTaskHighWaterMark;
-configSTACK_DEPTH_TYPE uxWatchDogTaskHighWaterMark;
+
 
 typedef struct {
 	EventBits_t bit;
+	TickType_t firstTick;
 	TickType_t lastTick;
 	TickType_t deadline;
 }wdog_task_t;
 
 wdog_task_t wdog_task [] = {
-	{ADC_TASK_BIT, 0, ADC_TASK_DEADLINE},
-	{I2C_TASK_BIT, 0, I2C_TASK_DEADLINE},
-	{FLOW_CONTROL_TASK_BIT, 0, FLOW_CONTROL_TASK_DEADLINE},
-	{MONITOR_TASK_BIT, 0, MONITOR_TASK_DEADLINE}
+	{ADC_TASK_BIT, 0, 0,ADC_TASK_DEADLINE},
+	{I2C_TASK_BIT, 0, 0,I2C_TASK_DEADLINE},
+	{FLOW_CONTROL_TASK_BIT, 0, 0,FLOW_CONTROL_TASK_DEADLINE},
+	{MONITOR_TASK_BIT, 0, 0,MONITOR_TASK_DEADLINE}
 };
 
 // PC9: adc task CH1
@@ -165,11 +166,11 @@ uint32_t xorshift32_star(void)
 
 void I2CSensorTaskHandler(void *pvParameters ){
 	MPU6050_Init(&imu);
-	TickType_t xLastWakeTime = xTaskGetTickCount();
-	uxI2CTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
+	TickType_t xLastWakeTime = pdTICKS_TO_MS(xTaskGetTickCount());
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);
+		wdog_task[1].firstTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		MPU6050_Read_IMU_DMA(&imu);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -181,10 +182,7 @@ void I2CSensorTaskHandler(void *pvParameters ){
 		if (xQueueSend(i2c_sensor_queue, (void *)&imu_queue_item, 0) != pdPASS){
 			//Error_Handler();
 		}
-		xSemaphoreTake(i2c_stack_usage_mutex, portMAX_DELAY);
-		uxI2CTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(i2c_stack_usage_mutex);
-		wdog_task[1].lastTick = xTaskGetTickCount();
+		wdog_task[1].lastTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		xEventGroupSetBits(wdog_event_group, BIT_1);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);
 
@@ -195,13 +193,16 @@ void I2CSensorTaskHandler(void *pvParameters ){
 
 void UARTReceiverTaskHandler(void *pvParameters ){
 	HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
-	uxUARTTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
+#ifndef FAULT_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
+#endif
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
+#ifndef	FAULT_TASK_DEBUG
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+#endif
 			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 			//HAL_UART_Transmit(&huart1, (uint8_t *)uart_tx_buffer, strlen(uart_tx_buffer), 100);
 			uint8_t local_buffer[UART_FRAME_SIZE] = {0};
@@ -213,37 +214,34 @@ void UARTReceiverTaskHandler(void *pvParameters ){
 			//Error_Handler();
 		}
 		HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
-		xSemaphoreTake(uart_stack_usage_mutex, portMAX_DELAY);
-		uxUARTTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(uart_stack_usage_mutex);
+#ifndef	FAULT_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
+#endif
 	}
 	vTaskDelete(NULL);
 }
 
 void ADCSensorTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime = xTaskGetTickCount();
-	uxADCTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
+//	uxADCTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+		//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+		wdog_task[0].firstTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		HAL_ADC_Start_DMA(&hadc1, (void *)&lum_value, 1);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+		//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
 		if (xTaskNotifyWait(0, 0, NULL, portMAX_DELAY) == pdPASS){
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 			xQueueSend(adc_sensor_queue, (void *)&lum_value, 0);
 		}
 		else {
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+			//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
 			//Error_Handler();
 		}
-		xSemaphoreTake(adc_stack_usage_mutex, portMAX_DELAY);
-		uxADCTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(adc_stack_usage_mutex);
-		wdog_task[0].lastTick = xTaskGetTickCount();
+		wdog_task[0].lastTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		xEventGroupSetBits(wdog_event_group, BIT_0);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+		//HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
 		vTaskDelayUntil(&xLastWakeTime, ADC_SENSOR_TASK_PERIOD_TICKS);
 	}
 	vTaskDelete(NULL);
@@ -252,7 +250,6 @@ void ADCSensorTaskHandler(void *pvParameters ){
 void ConsumerTaskHandler(void *pvParameters){
 	char *msg ="idle\n";
 	//char *filler ="\r\n";
-	uxConsumerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 	for (;;){
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
@@ -289,11 +286,6 @@ void ConsumerTaskHandler(void *pvParameters){
 		xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
 #endif
-
-		//vTaskDelayUntil(&xLastWakeTime, CONSUMER_TASK_PERIOD_MS);
-		xSemaphoreTake(consumer_stack_usage_mutex, portMAX_DELAY);
-		uxConsumerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(consumer_stack_usage_mutex);
 	}
 	vTaskDelete(NULL);
 }
@@ -307,13 +299,14 @@ void FlowControlTaskHandler(void *pvParameters ){
 	uint32_t i2c_sensor_queue_ratio = 0;
 	uint32_t uart_receiver_queue_ratio = 0;
 	uint32_t adc_sensor_queue_ratio = 0;
-	uxFlowControlTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 	char *debug = "debug";
 	for (;;){
 #ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
 #endif
+
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
+		wdog_task[2].firstTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		i2c_sensor_queue_consumption = uxQueueMessagesWaiting(i2c_sensor_queue);
 		adc_sensor_queue_consumption = uxQueueMessagesWaiting(adc_sensor_queue);
 		uart_receiver_queue_consumption = uxQueueMessagesWaiting(uart_receiver_queue);
@@ -377,10 +370,7 @@ void FlowControlTaskHandler(void *pvParameters ){
 #ifndef UART_TASK_DEBUG
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
 #endif
-		xSemaphoreTake(flow_control_stack_usage_mutex, portMAX_DELAY);
-		uxFlowControlTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(flow_control_stack_usage_mutex);
-		wdog_task[2].lastTick = xTaskGetTickCount();
+		wdog_task[2].lastTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		xEventGroupSetBits(wdog_event_group, BIT_2);
 		vTaskDelayUntil(&xLastWakeTime, FLOW_CONTROL_TASK_PERIOD_TICKS);
 	}
@@ -393,124 +383,140 @@ void MonitorTaskHandler(void *pvParameters ){
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	uint32_t free_bytes;
 	char *msg;
+	configSTACK_DEPTH_TYPE uxI2CTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxUARTTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxADCTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxConsumerTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxFlowControlTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxMonitorTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxFaultHandlerTaskHighWaterMark;
+	configSTACK_DEPTH_TYPE uxWatchDogTaskHighWaterMark;
+//	extern TaskHandle_t I2CSensorTask;
+//	extern TaskHandle_t ADCSensorTask;
+//	extern TaskHandle_t UARTReceiverTask;
+//	extern TaskHandle_t ConsumerTask;
+//	extern TaskHandle_t FlowControlTask;
+//	extern TaskHandle_t MonitorTask;
+//	extern TaskHandle_t FaultHandlerTask;
+//	extern TaskHandle_t WatchDogTask;
+	uxI2CTaskHighWaterMark = uxTaskGetStackHighWaterMark2( I2CSensorTask );
+	uxUARTTaskHighWaterMark = uxTaskGetStackHighWaterMark2( UARTReceiverTask );
+	uxADCTaskHighWaterMark = uxTaskGetStackHighWaterMark2( ADCSensorTask );
+	uxConsumerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( ConsumerTask );
+	uxFlowControlTaskHighWaterMark = uxTaskGetStackHighWaterMark2( FlowControlTask );
+	uxFaultHandlerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( FaultHandlerTask );
+	uxWatchDogTaskHighWaterMark = uxTaskGetStackHighWaterMark2( WatchDogTask );
 	uxMonitorTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 	for (;;){
-		xSemaphoreTake(monitor_stack_usage_mutex, portMAX_DELAY);
-		uxMonitorTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(monitor_stack_usage_mutex);
+
 		//flow control stack usage montior
-		xSemaphoreTake(flow_control_stack_usage_mutex, portMAX_DELAY);
+		uxFlowControlTaskHighWaterMark = uxTaskGetStackHighWaterMark2( FlowControlTask );
 		free_bytes = uxFlowControlTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < FLOW_CONTROL_TASK_STACK_SIZE * 0.05){
 			msg ="flow control task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2,(uint8_t *) msg, strlen(msg));
 		}
-		xSemaphoreGive(flow_control_stack_usage_mutex);
 		//adc stack usage montior
-		xSemaphoreTake(adc_stack_usage_mutex, portMAX_DELAY);
+		uxADCTaskHighWaterMark = uxTaskGetStackHighWaterMark2( ADCSensorTask );
 		free_bytes = uxADCTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < ADC_SENSOR_TASK_STACK_SIZE * 0.05){
 			msg ="adc task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2, (uint8_t *)msg, strlen(msg));
 		}
-		xSemaphoreGive(adc_stack_usage_mutex);
 		//i2c stack usage montior
-		xSemaphoreTake(i2c_stack_usage_mutex, portMAX_DELAY);
+		uxI2CTaskHighWaterMark = uxTaskGetStackHighWaterMark2( I2CSensorTask );
 		free_bytes = uxI2CTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < I2C_SENSOR_TASK_STACK_SIZE * 0.05){
 			msg ="I2C task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2, (uint8_t *)msg, strlen(msg));
 		}
-		xSemaphoreGive(i2c_stack_usage_mutex);
 		//uart stack usage montior
-		xSemaphoreTake(uart_stack_usage_mutex, portMAX_DELAY);
+		uxUARTTaskHighWaterMark = uxTaskGetStackHighWaterMark2( UARTReceiverTask );
 		free_bytes = uxUARTTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < UART_RECEIVER_TASK_STACK_SIZE * 0.05){
 			msg ="UART task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2, (uint8_t *)msg, strlen(msg));
 		}
-		xSemaphoreGive(uart_stack_usage_mutex);
 		//consumer stack usage montior
-		xSemaphoreTake(consumer_stack_usage_mutex, portMAX_DELAY);
+		uxConsumerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( ConsumerTask );
 		free_bytes = uxConsumerTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < CONSUMER_TASK_STACK_SIZE * 0.05){
 			msg ="Consumer task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2,(uint8_t *) msg, strlen(msg));
 		}
-		xSemaphoreGive(consumer_stack_usage_mutex);
 		//monitor stack usage montior
+		uxMonitorTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 		free_bytes = uxMonitorTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < MONITOR_TASK_STACK_SIZE * 0.05){
 			msg ="monitor task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2,(uint8_t *) msg, strlen(msg));
 		}
 		//fault handler stack usage montior
-		xSemaphoreTake(fault_handler_stack_usage_mutex, portMAX_DELAY);
+		uxFaultHandlerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( FaultHandlerTask );
 		free_bytes = uxFaultHandlerTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < FAULT_HANDLER_TASK_STACK_SIZE * 0.05){
 			msg ="fault handler task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2,(uint8_t *) msg, strlen(msg));
 		}
-		xSemaphoreGive(fault_handler_stack_usage_mutex);
 		//watchdog stack usage montior
-		xSemaphoreTake(watchdog_stack_usage_mutex, portMAX_DELAY);
 		free_bytes = uxWatchDogTaskHighWaterMark * sizeof(StackType_t);
 		if (free_bytes < WATCHDOG_TASK_STACK_SIZE * 0.05){
 			msg ="watchdog task stack about to overflow\r\n";
 			HAL_UART_Transmit_IT(&huart2,(uint8_t *) msg, strlen(msg));
 		}
-		xSemaphoreGive(watchdog_stack_usage_mutex);
-		wdog_task[3].lastTick = xTaskGetTickCount();
+		wdog_task[3].lastTick = pdTICKS_TO_MS(xTaskGetTickCount());
 		xEventGroupSetBits(wdog_event_group, BIT_3);
 		vTaskDelayUntil(&xLastWakeTime, MONITOR_TASK_PERIOD_TICKS);
 	}
 	vTaskDelete(NULL);
 }
 
+
+
+
 void FaultTaskHandler(void *pvParameters ){
 	task_deadline_counter_t task_deadline;
+	TickType_t xLastWakeTime = xTaskGetTickCount();
 	memset(&task_deadline, 0, sizeof(task_deadline));
 	uint32_t ulNotificationValue = 0;
 	char* log_msg;
-	uxFaultHandlerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
 	for (;;){
-		xTaskNotifyWait(0, 0, &ulNotificationValue, portMAX_DELAY);
-		if (ulNotificationValue == ADC_TASK_DEADLINE_MISS_FLAG ){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
+		xTaskNotifyWait(0x00,0xFFFFFFFF,&ulNotificationValue,portMAX_DELAY);
+		if (ulNotificationValue & ADC_TASK_DEADLINE_MISS_FLAG ){
 			task_deadline.adc++;
 			if (task_deadline.adc>=3){
-				log_msg = "adc task missed 3 deadlines";
+				log_msg = "adc task missed 3 deadlines\r\n";
 				HAL_UART_Transmit_IT(&huart2,(uint8_t *) log_msg, strlen(log_msg));
 				//will increase task period
 			}
 		}
-		else if (ulNotificationValue == I2C_TASK_DEADLINE_MISS_FLAG ){
+		else if (ulNotificationValue & I2C_TASK_DEADLINE_MISS_FLAG ){
 			task_deadline.i2c++;
 			if (task_deadline.i2c>=3){
-				log_msg = "i2c task missed 3 deadlines";
+				log_msg = "i2c task missed 3 deadlines\r\n";
 				HAL_UART_Transmit_IT(&huart2,(uint8_t *) log_msg, strlen(log_msg));
 				//will increase task period
 			}
 		}
-		else if (ulNotificationValue == FLOW_CONTROL_TASK_DEADLINE_MISS_FLAG ){
+		else if (ulNotificationValue & FLOW_CONTROL_TASK_DEADLINE_MISS_FLAG ){
 			task_deadline.flow_control++;
 			if (task_deadline.flow_control>=3){
-				log_msg = "flow control task missed 3 deadlines";
+				log_msg = "flow control task missed 3 deadlines\r\n";
 				HAL_UART_Transmit_IT(&huart2, (uint8_t *)log_msg, strlen(log_msg));
 				//will increase task period
 			}
 		}
-		else if (ulNotificationValue == MONITOR_TASK_DEADLINE_MISS_FLAG ){
-			task_deadline.monitoring++;
-			if (task_deadline.monitoring>=3){
-				log_msg = "monitor task missed 3 deadlines";
-				HAL_UART_Transmit_IT(&huart2,(uint8_t *)log_msg, strlen(log_msg));
-				//will increase task period
-			}
-		}
-		xSemaphoreTake(fault_handler_stack_usage_mutex, portMAX_DELAY);
-		uxFaultHandlerTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(fault_handler_stack_usage_mutex);
-
+//		else if (ulNotificationValue == MONITOR_TASK_DEADLINE_MISS_FLAG ){
+//			task_deadline.monitoring++;
+//			if (task_deadline.monitoring>=3){
+//				log_msg = "monitor task missed 3 deadlines";
+//				HAL_UART_Transmit_IT(&huart2,(uint8_t *)log_msg, strlen(log_msg));
+//				//will increase task period
+//			}
+//		}
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
+		vTaskDelayUntil(&xLastWakeTime,50);
 	}
 	vTaskDelete(NULL);
 }
@@ -518,40 +524,47 @@ void FaultTaskHandler(void *pvParameters ){
 void WatchDogTaskHandler(void* pvParameters){
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 	EventBits_t uxBits;
-	TickType_t now;
-	uxWatchDogTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
+	char* log_msg;
+	char* deadline_msg;
 	for(;;){
+		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
 		uxBits = xEventGroupWaitBits(wdog_event_group, BIT_0 | BIT_1 | BIT_2 | BIT_3,
 				pdTRUE,pdFALSE,portMAX_DELAY);
-		now = xTaskGetTickCount();
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);
+		HAL_IWDG_Refresh(&hiwdg);
+		//now = xTaskGetTickCount();
 		if ( (uxBits & BIT_0) !=0 ){
 			//adc
-			if (now - wdog_task[0].lastTick >wdog_task[0].deadline){
+			log_msg ="bit 0\r\n";
+			//HAL_UART_Transmit_IT(&huart2,(uint8_t *)log_msg, strlen(log_msg));
+			if (wdog_task[0].lastTick - wdog_task[0].firstTick >wdog_task[0].deadline){
 				xTaskNotify( FaultHandlerTask, ADC_TASK_DEADLINE_MISS_FLAG, eSetValueWithOverwrite );
 			}
 		}
 		if ( (uxBits & BIT_1) !=0 ){
-			if (now - wdog_task[1].lastTick >wdog_task[1].deadline){
+			log_msg ="bit 1\r\n";
+			//HAL_UART_Transmit_IT(&huart2,(uint8_t *)log_msg, strlen(log_msg));
+			if (wdog_task[1].lastTick - wdog_task[1].firstTick >wdog_task[1].deadline){
 				xTaskNotify( FaultHandlerTask, I2C_TASK_DEADLINE_MISS_FLAG, eSetValueWithOverwrite );
 			}
 			//i2c
 		}
 		if ( (uxBits & BIT_2) !=0 ){
-			if (now - wdog_task[2].lastTick >wdog_task[2].deadline){
+			log_msg ="bit 2\r\n";
+			//HAL_UART_Transmit_IT(&huart2,(uint8_t *)log_msg, strlen(log_msg));
+			if (wdog_task[2].lastTick - wdog_task[2].firstTick >wdog_task[2].deadline){
 				xTaskNotify( FaultHandlerTask, FLOW_CONTROL_TASK_DEADLINE_MISS_FLAG, eSetValueWithOverwrite );
 			}
 			//flow control
 		}
-		if ( (uxBits & BIT_3) !=0 ){
-			if (now - wdog_task[3].lastTick >wdog_task[3].deadline){
-				xTaskNotify( FaultHandlerTask, MONITOR_TASK_DEADLINE_MISS_FLAG, eSetValueWithOverwrite );
-			}
-			//monitor
-		}
-		HAL_IWDG_Refresh(&hiwdg);
-		xSemaphoreTake(watchdog_stack_usage_mutex, portMAX_DELAY);
-		uxWatchDogTaskHighWaterMark = uxTaskGetStackHighWaterMark2( NULL );
-		xSemaphoreGive(watchdog_stack_usage_mutex);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+//		if ( (uxBits & BIT_3) !=0 ){
+//			if (now - wdog_task[3].lastTick >wdog_task[3].deadline){
+//				xTaskNotify( FaultHandlerTask, MONITOR_TASK_DEADLINE_MISS_FLAG, eSetValueWithOverwrite );
+//			}
+//			//monitor
+//		}
+
 	}
 	vTaskDelete(NULL);
 }
