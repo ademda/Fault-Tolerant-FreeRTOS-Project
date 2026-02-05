@@ -170,25 +170,25 @@ int main(void)
   wdog_event_group =  xEventGroupCreate();
   MPU6050_Init(&imu);
 
-  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 7, &ADCSensorTask);
+  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 6, &ADCSensorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL,6, &I2CSensorTask);
+  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL,5, &I2CSensorTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 5, &UARTReceiverTask);
+  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 4, &UARTReceiverTask);
   configASSERT(create_status == pdPASS);
 
   create_status = xTaskCreate(ConsumerTaskHandler, "Consumer Task", CONSUMER_TASK_STACK_SIZE, NULL, 8, &ConsumerTask);
   configASSERT(create_status == pdPASS);
 
-  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
+  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 3, &FlowControlTask);
   configASSERT(create_status == pdPASS);
 //
 //  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
 //  configASSERT(create_status == pdPASS);
 //
-  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 2, &WatchDogTask);
+  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 7, &WatchDogTask);
   configASSERT(create_status == pdPASS);
 //
   create_status = xTaskCreate(FaultTaskHandler, "Fault Handler Task", FAULT_HANDLER_TASK_STACK_SIZE, NULL,9, &FaultHandlerTask);

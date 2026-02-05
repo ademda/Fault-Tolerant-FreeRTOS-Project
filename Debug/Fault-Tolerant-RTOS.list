@@ -3517,10 +3517,10 @@ int main(void)
  800211e:	4870      	ldr	r0, [pc, #448]	@ (80022e0 <main+0x2a4>)
  8002120:	f7ff fcf4 	bl	8001b0c <MPU6050_Init>
 
-  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 7, &ADCSensorTask);
+  create_status = xTaskCreate(ADCSensorTaskHandler, "ADC Sensor Task", ADC_SENSOR_TASK_STACK_SIZE, NULL, 6, &ADCSensorTask);
  8002124:	4b6f      	ldr	r3, [pc, #444]	@ (80022e4 <main+0x2a8>)
  8002126:	9301      	str	r3, [sp, #4]
- 8002128:	2307      	movs	r3, #7
+ 8002128:	2306      	movs	r3, #6
  800212a:	9300      	str	r3, [sp, #0]
  800212c:	2300      	movs	r3, #0
  800212e:	f44f 6280 	mov.w	r2, #1024	@ 0x400
@@ -3543,10 +3543,10 @@ int main(void)
  8002156:	bf00      	nop
  8002158:	e7fd      	b.n	8002156 <main+0x11a>
 
-  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL,6, &I2CSensorTask);
+  create_status = xTaskCreate(I2CSensorTaskHandler, "I2C Sensor Task", I2C_SENSOR_TASK_STACK_SIZE, NULL,5, &I2CSensorTask);
  800215a:	4b65      	ldr	r3, [pc, #404]	@ (80022f0 <main+0x2b4>)
  800215c:	9301      	str	r3, [sp, #4]
- 800215e:	2306      	movs	r3, #6
+ 800215e:	2305      	movs	r3, #5
  8002160:	9300      	str	r3, [sp, #0]
  8002162:	2300      	movs	r3, #0
  8002164:	f44f 6280 	mov.w	r2, #1024	@ 0x400
@@ -3569,10 +3569,10 @@ int main(void)
  800218c:	bf00      	nop
  800218e:	e7fd      	b.n	800218c <main+0x150>
 
-  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 5, &UARTReceiverTask);
+  create_status = xTaskCreate(UARTReceiverTaskHandler, "UART Receiver Task", UART_RECEIVER_TASK_STACK_SIZE, NULL, 4, &UARTReceiverTask);
  8002190:	4b5a      	ldr	r3, [pc, #360]	@ (80022fc <main+0x2c0>)
  8002192:	9301      	str	r3, [sp, #4]
- 8002194:	2305      	movs	r3, #5
+ 8002194:	2304      	movs	r3, #4
  8002196:	9300      	str	r3, [sp, #0]
  8002198:	2300      	movs	r3, #0
  800219a:	f44f 6280 	mov.w	r2, #1024	@ 0x400
@@ -3621,10 +3621,10 @@ int main(void)
  80021f8:	bf00      	nop
  80021fa:	e7fd      	b.n	80021f8 <main+0x1bc>
 
-  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 4, &FlowControlTask);
+  create_status = xTaskCreate(FlowControlTaskHandler, "Control Task", FLOW_CONTROL_TASK_STACK_SIZE, NULL, 3, &FlowControlTask);
  80021fc:	4b45      	ldr	r3, [pc, #276]	@ (8002314 <main+0x2d8>)
  80021fe:	9301      	str	r3, [sp, #4]
- 8002200:	2304      	movs	r3, #4
+ 8002200:	2303      	movs	r3, #3
  8002202:	9300      	str	r3, [sp, #0]
  8002204:	2300      	movs	r3, #0
  8002206:	f44f 6280 	mov.w	r2, #1024	@ 0x400
@@ -3650,10 +3650,10 @@ int main(void)
 //  create_status = xTaskCreate(MonitorTaskHandler, "Monitoring Task", MONITOR_TASK_STACK_SIZE, NULL, 3, &MonitorTask);
 //  configASSERT(create_status == pdPASS);
 //
-  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 2, &WatchDogTask);
+  create_status = xTaskCreate(WatchDogTaskHandler, "Watchdog Task", WATCHDOG_TASK_STACK_SIZE, NULL, 7, &WatchDogTask);
  8002232:	4b3b      	ldr	r3, [pc, #236]	@ (8002320 <main+0x2e4>)
  8002234:	9301      	str	r3, [sp, #4]
- 8002236:	2302      	movs	r3, #2
+ 8002236:	2307      	movs	r3, #7
  8002238:	9300      	str	r3, [sp, #0]
  800223a:	2300      	movs	r3, #0
  800223c:	f44f 6280 	mov.w	r2, #1024	@ 0x400
