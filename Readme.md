@@ -15,6 +15,8 @@ A real-time system demonstrating FreeRTOS task design patterns on STM32F401RE. T
 
 The system has three data producers (ADC sensor, MPU6050 IMU, UART receiver) competing for a single output channel (UART to PC). The core challenge: **how do you fairly arbitrate access while ensuring no producer starves and real-time deadlines are met?**
 
+![Hardware Setup](images/cable_photo.jpg)
+
 ```
                               ┌─────────────────┐
                               │  Flow Control   │ Decides which queue
@@ -246,11 +248,15 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
 }
 ```
 
+
+
 ## Results and Performance
 
-<!-- Placeholder for performance images -->
-*[Logic analyzer timing diagrams will be added here]*
+![Logic Analyzer Timing Diagram](images/Logic_analyzer.png)
 
+![Task Output](images/Tasks.png)
+
+![Fault Detection Output](images/fault%20detection.png)
 ## Project Structure
 ```
 App/Src/
