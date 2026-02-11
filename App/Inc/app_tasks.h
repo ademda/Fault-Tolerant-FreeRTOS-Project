@@ -34,7 +34,6 @@
 #define I2C_SENSOR_TASK_STACK_SIZE		1024
 #define UART_RECEIVER_TASK_STACK_SIZE	1024
 #define FLOW_CONTROL_TASK_STACK_SIZE	1024
-#define MONITOR_TASK_STACK_SIZE			1024
 #define CONSUMER_TASK_STACK_SIZE		1024
 #define FAULT_HANDLER_TASK_STACK_SIZE	1024
 #define WATCHDOG_TASK_STACK_SIZE		1024
@@ -43,7 +42,6 @@ void I2CSensorTaskHandler(void *pvParameters );
 void UARTReceiverTaskHandler(void *pvParameters );
 void ADCSensorTaskHandler(void *pvParameters );
 void ConsumerTaskHandler(void *pvParameters);
-void MonitorTaskHandler(void *pvParameters );
 void FlowControlTaskHandler(void *pvParameters );
 void FaultTaskHandler(void *pvParameters );
 void WatchDogTaskHandler(void* pvParameters);
