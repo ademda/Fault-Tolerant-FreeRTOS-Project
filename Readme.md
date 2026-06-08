@@ -1,277 +1,213 @@
-# STM32 FreeRTOS Multi-Task System
+# STM32 FreeRTOS Fault-Tolerant Multi-Task System
 
-A real-time system demonstrating FreeRTOS task design patterns on STM32F401RE. This project explores the practical trade-offs between **periodic vs event-driven tasks**, when to use **queues vs notifications vs event groups**, and how to implement **fair resource arbitration** between competing producers.
+A real-time embedded system built on the **STM32F401RE** running **FreeRTOS**, exploring the practical trade-offs of task design, synchronization primitives, fair resource arbitration, and fault tolerance.
+
+---
 
 ## Table of Contents
+
 - [System Overview](#system-overview)
-- [Task Design: Periodic vs Event-Driven](#task-design-periodic-vs-event-driven)
+- [Hardware Setup](#hardware-setup)
+- [Task Architecture](#task-architecture)
+- [Communication: DMA vs Interrupts](#communication-dma-vs-interrupts)
 - [Synchronization: Choosing the Right Primitive](#synchronization-choosing-the-right-primitive)
 - [The RT-Lottery Arbitration Problem](#the-rt-lottery-arbitration-problem)
-- [Fault Monitoring with Event Groups](#fault-monitoring-with-event-groups)
+- [Fault Monitoring](#fault-monitoring)
 - [Results and Performance](#results-and-performance)
-- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+
+---
 
 ## System Overview
 
-The system has three data producers (ADC sensor, MPU6050 IMU, UART receiver) competing for a single output channel (UART to PC). The core challenge: **how do you fairly arbitrate access while ensuring no producer starves and real-time deadlines are met?**
+Three data producers — an ADC sensor, an MPU6050 IMU over I2C, and a UART receiver — all compete for a single output channel (UART TX to a PC terminal). The core challenge: **how do you fairly arbitrate access while ensuring no producer starves and real-time deadlines are always met?**
+
+**Data flow**: producers push to their individual queues → Consumer reads based on Flow Control's arbitration decision → outputs via UART TX.
+
+**Monitoring layer**: the Watchdog task monitors periodic task deadlines using event groups and keeps the hardware IWDG alive. The Fault Handler responds to critical errors via task notifications.
+
+---
+
+## Hardware Setup
 
 ![Hardware Setup](images/cable_photo.jpg)
 
-```
-                              ┌─────────────────┐
-                              │  Flow Control   │ Decides which queue
-                              │   (Periodic)    │ the Consumer reads
-                              └────────┬────────┘
-                                       │ arbiter_decision
-                                       ▼
-┌─────────────┐  ┌───────┐    ┌─────────────────┐
-│ ADC Task    │──│ Queue │───►│                 │
-│ (Periodic)  │  └───────┘    │                 │
-│ DMA+Notify  │               │    Consumer     │───► UART TX to PC
-└─────────────┘               │   (Event-Driven)│
-┌─────────────┐  ┌───────┐    │                 │
-│ I2C Task    │──│ Queue │───►│                 │
-│ (Periodic)  │  └───────┘    └─────────────────┘
-│ DMA+Notify  │                       ▲
-└─────────────┘               ┌───────┘
-┌─────────────┐  ┌───────┐    │
-│ UART RX     │──│ Queue │────┘
-│ (Event)     │  └───────┘
-│ Interrupt   │
-└─────────────┘
+- **MCU**: STM32F401RE (Nucleo board)
+- **IMU**: MPU6050 connected over I2C
+- **ADC**: onboard, reading an analog signal
+- **UART**: communication with a PC terminal (PuTTY) at 115200 bps
+- **Logic Analyzer**: Saleae Logic 2, used to observe task timing, IDLE time, I2C bus activity, and UART TX bursts
 
-        ┌───────────────────────────────────────┐
-        │           Monitoring Layer            │
-        ├───────────────────┬───────────────────┤
-        │   Watchdog Task   │ Fault Handler     │
-        │  (Event Groups)   │ (Notifications)   │
-        │  Deadline checks  │ Stack overflow    │
-        │  + IWDG refresh   │ + System recovery │
-        └───────────────────┴───────────────────┘
-```
+---
 
-**Data Flow**: Producers push to their queues → Consumer reads based on Flow Control's decision → Outputs via UART TX.
+## Task Architecture
 
-**Monitoring Layer**: Watchdog monitors periodic task deadlines using event groups. Fault Handler responds to critical errors via task notifications.
+The system has **6 tasks**, each with a deliberate design choice between periodic and event-driven execution.
 
-### DMA vs Interrupts: When to Use Each
+### Periodic tasks — when timing predictability matters
 
-| Peripheral | Method | Why |
-|------------|--------|-----|
-| **I2C (MPU6050)** | DMA | Large data transfer (14 bytes). CPU is free during transfer. Task waits on notification from `HAL_I2C_MemRxCpltCallback`. |
-| **ADC** | DMA | Continuous background sampling. Zero CPU overhead for conversion. |
-| **UART RX** | Interrupt | Small, unpredictable data. Interrupt fires on complete frame, wakes task immediately. |
-| **UART TX** | Interrupt | Consumer sends data, then waits for TX complete notification before next cycle. |
+The ADC task, I2C sensor task, and Flow Control task all run on fixed periods. Using a fixed-reference wake mechanism (rather than a simple delay after execution) ensures the period stays exact regardless of how long the task body takes to run. This matters for deadline monitoring — if a task drifts, the watchdog will catch it.
 
-**DMA Pattern** (I2C sensor task):
-```c
-MPU6050_Read_IMU_DMA(&imu);  // Starts DMA transfer, returns immediately
-// Task continues or blocks on queue
-// When DMA completes → HAL_I2C_MemRxCpltCallback → xTaskNotifyFromISR
-```
+| Task | Period | Role |
+|---|---|---|
+| ADC Task | 3 ms | Samples ADC via DMA, pushes to queue |
+| I2C Sensor Task | 5 ms | Reads MPU6050 via DMA, pushes to queue |
+| Flow Control Task | 50 ms | Runs RT-Lottery arbitration, sets arbiter_decision |
 
-**Interrupt Pattern** (UART RX):
-```c
-HAL_UART_Receive_IT(&huart1, buffer, size);  // Arms interrupt
-xTaskNotifyWait(...);  // Task sleeps
-// When frame received → HAL_UART_RxCpltCallback → xTaskNotifyFromISR → Task wakes
-```
+### Event-driven tasks — when sleeping is better than polling
 
-**Key insight**: DMA is better for bulk transfers where you want the CPU completely free. Interrupts are simpler for small, event-based data where latency matters more than throughput.
+The UART RX task, Consumer task, and Fault Handler sleep indefinitely until signalled. They consume zero CPU while waiting, which is a large part of why the system maintains significant CPU headroom even under full peripheral load.
 
-## Task Design: Periodic vs Event-Driven
+| Task | Wake condition | Role |
+|---|---|---|
+| UART RX Task | ISR notification on frame complete | Copies data locally, pushes to queue |
+| Consumer Task | Notification from Flow Control | Reads selected queue, sends via UART TX |
+| Fault Handler | Task notification on error | Logs fault, suppresses IWDG refresh → system reset |
 
-### When to Use Periodic Tasks
+![System Architecture Diagram](images/System_Architecture.png)
 
-Periodic tasks are ideal when you need **predictable, consistent timing**. The sensor tasks use `vTaskDelayUntil()` to guarantee fixed intervals:
+---
 
-```c
-void I2CSensorTaskHandler(void *pvParameters) {
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    for (;;) {
-        MPU6050_Read_IMU_DMA(&imu);
-        xQueueSend(i2c_sensor_queue, &imu_queue_item, 0);
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(3));  // Exact 3ms period
-    }
-}
-```
+## Communication: DMA vs Interrupts
 
-**Why `vTaskDelayUntil()` instead of `vTaskDelay()`?**  
-`vTaskDelay(3ms)` waits 3ms *after* execution completes, so total period = execution_time + 3ms (variable). `vTaskDelayUntil()` calculates the next wake time from a fixed reference, maintaining exact periodicity regardless of execution time variations.
+The choice between DMA and interrupt-driven transfers is not cosmetic — it directly affects CPU availability and task wake latency.
 
-### When to Use Event-Driven Tasks
+| Peripheral | Method | Reasoning |
+|---|---|---|
+| I2C (MPU6050) | DMA | Transfers 14 bytes per read. CPU is completely free during transfer. Task sleeps and is woken by a notification from the DMA complete callback. |
+| ADC | DMA | Continuous background sampling with zero CPU involvement. |
+| UART RX | Interrupt | Data arrives in small, unpredictable frames. An interrupt fires on frame completion and immediately wakes the sleeping task via notification. |
+| UART TX | Interrupt | Consumer sends a frame, then sleeps until a TX complete notification arrives before starting the next cycle. |
 
-Event-driven tasks sleep until something happens, saving CPU cycles. The UART receiver uses **task notifications** to wake only when data arrives:
+**Key insight**: DMA is the right choice when data is bulk and timing is not urgent — the CPU can go do something else entirely. Interrupts are the right choice when data is small and latency to wake the task matters more than throughput.
 
-```c
-void UARTReceiverTaskHandler(void *pvParameters) {
-    HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
-    for (;;) {
-        xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);  // Sleep until ISR signals
-        
-        // Copy data locally (ISR might overwrite buffer)
-        memcpy(local_buffer, uart_rx_buffer, UART_FRAME_SIZE);
-        xQueueSend(uart_receiver_queue, local_buffer, 0);
-        
-        HAL_UART_Receive_IT(&huart1, uart_rx_buffer, UART_FRAME_SIZE);
-    }
-}
-```
-
-**Key insight**: The task consumes zero CPU while waiting. The ISR triggers it directly via `xTaskNotifyFromISR()`.
+---
 
 ## Synchronization: Choosing the Right Primitive
 
-### Queues: When You Need to Pass Data
+Four different FreeRTOS synchronization primitives are used, each chosen for a specific reason.
 
-Queues handle the producer-consumer pattern with built-in thread safety. Each queue is sized for its specific data type:
+### Queues — passing data safely between tasks
 
-```c
-adc_sensor_queue = xQueueCreate(ADC_QUEUE_SIZE, sizeof(uint16_t));      // Small values
-i2c_sensor_queue = xQueueCreate(I2C_QUEUE_SIZE, sizeof(imu_data_t));    // Struct with 6 floats
-uart_receiver_queue = xQueueCreate(UART_QUEUE_SIZE, UART_FRAME_SIZE);   // Byte arrays
-```
+Each producer has its own dedicated queue sized for its data type: raw ADC values, IMU structs (6 floats of roll/pitch/yaw data), and raw UART byte arrays. Queues provide atomic copying — there is no risk of reading half-updated data — and they naturally buffer rate mismatches between producers and the Consumer.
 
-**Why queues instead of shared variables?**  
-Queues provide atomic copying—no chance of reading half-updated data. They also naturally decouple producer/consumer rates through buffering.
+**Why not shared global variables?** A shared variable with no protection can be partially written when read. A queue copy is atomic by design.
 
-### Task Notifications: When You Just Need to Signal
+### Task notifications — lightest possible 1-to-1 signalling
 
-Task notifications are the lightest synchronization primitive—no kernel object allocation, just a 32-bit value embedded in the task control block.
+Every ISR-to-task signal in the system uses task notifications. They require no kernel object allocation — the notification value lives directly in the task control block. This makes them faster and cheaper than binary semaphores for ISR wakeups.
 
-**Used here for:**
-- ISR → Task signaling (UART RX complete, UART TX complete, I2C DMA complete)
+**Trade-off**: notifications only work for 1-to-1 signalling. If multiple senders need to signal the same task, a semaphore or event group is the right tool instead.
 
-```c
-// In HAL callback (ISR context)
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    xTaskNotifyFromISR(UARTReceiverTask, 0, eNoAction, &xHigherPriorityTaskWoken);
-}
-```
+### Mutex with priority inheritance — protecting shared state
 
-**Why notifications instead of binary semaphores?**  
-Faster (no kernel object lookup) and uses less RAM. The trade-off: only works for 1-to-1 signaling to a specific task.
+The shared arbitration buffer (the decision written by Flow Control and read by Consumer) is protected by a mutex. Mutexes in FreeRTOS implement **priority inheritance**: if a high-priority task blocks waiting for a mutex held by a low-priority task, the low-priority task temporarily runs at the higher priority to release it faster. This prevents unbounded priority inversion.
 
-### Mutexes: When You Need Exclusive Access
+**Why not a binary semaphore?** Binary semaphores have no priority inheritance. In a system with mixed task priorities, this can cause a high-priority task to stall for an unpredictable and unbounded amount of time.
 
-The `arbitration_mutex` protects the shared frame buffer that both Flow Control and Consumer tasks access:
+### Event groups — monitoring multiple tasks in a single call
 
-```c
-xSemaphoreTake(arbitration_mutex, portMAX_DELAY);
-// Modify arbiter_decision and write_buf safely
-xSemaphoreGive(arbitration_mutex);
-```
+The Watchdog task needs to know that all three periodic tasks have completed their work within their deadlines. Event groups allow it to block on a single call waiting for all three bits to be set — with a deadline timeout. If the timeout expires before all bits are set, a miss is recorded.
 
-**Why a mutex instead of a binary semaphore?**  
-Mutexes implement priority inheritance—if a high-priority task blocks on a mutex held by a low-priority task, the low-priority task temporarily inherits the higher priority. This prevents unbounded priority inversion.
+**Why not three separate semaphores?** Each semaphore would require a separate blocking call. The event group collapses this into one, which is both simpler and more efficient.
 
-### Event Groups: When You Need to Monitor Multiple Conditions
-
-The watchdog needs to verify that multiple periodic tasks are still running. Event groups let it wait for several bits simultaneously:
-
-```c
-// Each periodic task sets its bit after completing work
-xEventGroupSetBits(wdog_event_group, BIT_0);  // ADC done
-xEventGroupSetBits(wdog_event_group, BIT_1);  // I2C done
-xEventGroupSetBits(wdog_event_group, BIT_2);  // Flow Control done
-
-// Watchdog waits for all bits with timeout (deadline monitoring)
-EventBits_t bits = xEventGroupWaitBits(wdog_event_group, 
-                                       BIT_0 | BIT_1 | BIT_2,
-                                       pdTRUE,    // Clear bits on exit
-                                       pdFALSE,   // Wait for ANY bit
-                                       deadline_timeout);
-```
-
-**Why event groups instead of multiple semaphores?**  
-A single blocking call monitors all tasks. With semaphores, you'd need separate waits or complex polling logic.
+---
 
 ## The RT-Lottery Arbitration Problem
 
-With three producers filling queues at different rates, how do you decide who gets the output bus? 
+With three producers filling queues at different rates, a naive arbitration policy like round-robin or strict priority leads to either starvation or poor bus utilization. This system adapts the **RT_lottery** algorithm proposed by Chen et al. in:
 
-### Two-Layer Solution
+> *"A Real-Time and Bandwidth Guaranteed Arbitration Algorithm for SoC Bus Communication"*  
+> Chien-Hua Chen, Geeng-Wei Lee, Juinn-Dar Huang, Jing-Yang Jou — ASP-DAC 2006  
+> https://www.cecs.uci.edu/~papers/aspdac06/pdf/p600_6B-3.pdf
 
-**Layer 1 - Real-Time Priority**: If any queue exceeds a critical threshold, that producer gets immediate access. This prevents overflow:
+The original algorithm was designed for SoC bus arbitration between hardware masters. Here it is adapted for software task arbitration over a shared UART output channel.
 
-```c
-if (i2c_queue_ratio >= I2C_MAX_CONSUMPTION_RATIO) {
-    arbiter_decision = I2C_OWNERSHIP;  // Emergency: I2C queue nearly full
-}
-else if (adc_queue_ratio >= ADC_MAX_CONSUMPTION_RATIO) {
-    arbiter_decision = ADC_OWNERSHIP;  // Emergency: ADC queue nearly full
-}
-```
+### Two-layer solution
 
-**Layer 2 - Lottery**: When all queues are healthy, use weighted random selection. Each producer has a ticket range proportional to its importance:
+**Layer 1 — Real-time override**: if any queue's fill ratio exceeds a critical threshold, that producer gets the output bus immediately, regardless of the lottery result. This prevents queue overflow and guarantees bounded latency for time-sensitive producers.
 
-```c
-uint16_t random_ticket = xorshift32_star();  // Fast PRNG (xorshift algorithm)
+**Layer 2 — Weighted lottery**: when all queues are healthy, a fast PRNG (xorshift32) draws a ticket. Each producer owns a range of the ticket space proportional to its required bandwidth share. The producer whose range contains the drawn ticket wins the current cycle.
 
-if (random_ticket <= ADC_MAX_LOTTERY_TICKET) {
-    arbiter_decision = ADC_OWNERSHIP;
-} else if (random_ticket <= UART_MAX_LOTTERY_TICKET) {
-    arbiter_decision = UART_OWNERSHIP;
-} else {
-    arbiter_decision = I2C_OWNERSHIP;
-}
-```
+**Why lottery over round-robin?** Round-robin is deterministic and periodic. Combined with periodic producer tasks, this creates resonance — certain producers are systematically served at the same phase of their period while others are delayed. Lottery breaks these timing correlations while still providing statistical fairness over time.
 
-**Why lottery instead of round-robin?**  
-Round-robin is deterministic and can create resonance issues with periodic tasks. Lottery provides statistical fairness while breaking timing correlations.
+![RT-Lottery Arbitration Flow](images/Rt_Lottery_Arb_flow.png)
 
-## Fault Monitoring with Event Groups
+---
 
-The system implements software deadline monitoring on top of the hardware watchdog:
+## Fault Monitoring
 
-```c
-typedef struct {
-    EventBits_t bit;        // Which event group bit represents this task
-    TickType_t firstTick;   // When task started
-    TickType_t lastTick;    // When task finished
-    TickType_t deadline;    // Maximum allowed execution time
-} wdog_task_t;
+The system implements a two-path fault monitoring layer on top of the hardware IWDG watchdog.
 
-wdog_task_t wdog_task[] = {
-    {ADC_TASK_BIT, 0, 0, ADC_TASK_DEADLINE},         // 4ms deadline
-    {I2C_TASK_BIT, 0, 0, I2C_TASK_DEADLINE},         // 8ms deadline
-    {FLOW_CONTROL_TASK_BIT, 0, 0, FLOW_CONTROL_DEADLINE}  // 20ms deadline
-};
-```
+### Path 1 — Software deadline monitoring
 
-Each periodic task records its start/end times and sets its event bit. The Watchdog task checks if actual execution exceeded the deadline. If too many misses occur, the hardware watchdog isn't refreshed and the system resets.
+Each periodic task records its start tick at the beginning of its body and its end tick after completing work, then sets its dedicated event group bit. The Watchdog task waits for all bits with a deadline timeout. If the actual execution window exceeds the configured deadline, a miss counter increments. Once misses accumulate beyond a threshold, the Watchdog stops refreshing the hardware IWDG and the system resets cleanly.
 
-**Stack overflow detection** is handled via FreeRTOS hooks:
-```c
-void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
-    // Log error, trigger watchdog reset
-}
-```
+| Task | Deadline |
+|---|---|
+| ADC Task | 4 ms |
+| I2C Sensor Task | 8 ms |
+| Flow Control Task | 20 ms |
 
+### Path 2 — Stack overflow recovery
 
+FreeRTOS detects stack overflows through its stack overflow hook. When triggered, a task notification is sent to the Fault Handler, which suppresses IWDG refreshes and forces a controlled system reset.
+
+![Fault Monitoring Chain](images/Fault_monitoring.png)
+
+---
 
 ## Results and Performance
 
-![Logic Analyzer Timing Diagram](images/Logic_analyzer.png)
+### Logic analyzer — task timing and IDLE time
+
+![Logic Analyzer](images/Logic_analyzer.png)
+
+Seven signals captured simultaneously: I2C CLK, I2C SDA, ESP TX (UART RX input), UART TX output, WDOG heartbeat, IDLE task, and Consumer task activity.
+
+Key observations:
+- The **IDLE signal** (green) is consistently active between task executions, confirming the CPU is not saturated.
+- The **I2C bus** (pink/orange) shows regular burst transfers from the MPU6050 DMA reads.
+- The **Consumer** (blue) fires in short bursts after each arbitration cycle.
+- The **WDOG** signal pulses regularly, confirming the hardware watchdog is being refreshed on schedule.
+
+### UART output — arbitration in action
 
 ![Task Output](images/Tasks.png)
 
-![Fault Detection Output](images/fault%20detection.png)
+The terminal output shows the RT-Lottery at work: ADC values, IMU Roll/Pitch data, and UART RX echo strings interleaved according to their ticket weights. The "i2c deadline" messages appear when the I2C task's deadline is intentionally stressed during limit testing.
+
+### Fault detection
+
+![Fault Detection](images/fault_detection.png)
+
+When deadline violations are injected, the monitoring chain correctly triggers: miss counters increment, IWDG refresh is suppressed, and the system resets. Recovery is clean with no data corruption observed.
+
+### Performance headroom
+
+When pushing the system to its absolute limits by minimizing producer task periods, the bottleneck hit was the **I2C hardware protocol ceiling** — the bus physically cannot deliver bytes any faster. At that saturation point, the STM32F401RE was still running below **70% CPU utilization**, clearly visible as consistent IDLE signal activity on the logic analyzer.
+
+This headroom is significant. It means the same MCU, under the same fully-saturated peripheral load, still has capacity for additional sensors, more complex sensor fusion, or compute-intensive workloads like FFT and other DSP algorithms — without requiring a faster chip.
+
+---
+
 ## Project Structure
+
 ```
 App/Src/
-├── app_tasks.c    # All task handlers and RT-Lottery logic
-├── mpu6050.c      # I2C sensor driver with DMA
-├── adc_sensor.c   # ADC sampling
-└── uart_device.c  # UART communication
+├── app_tasks.c      # All task handlers and RT-Lottery arbitration logic
+├── mpu6050.c        # I2C sensor driver with DMA support
+├── adc_sensor.c     # ADC sampling
+└── uart_device.c    # UART communication
 
 Core/Src/
-├── main.c         # RTOS init, queue/mutex creation, task spawning
-└── stm32f4xx_it.c # ISRs with xTaskNotifyFromISR calls
+├── main.c           # RTOS init, queue/mutex/event group creation, task spawning
+└── stm32f4xx_it.c   # ISR handlers, task notification calls
 
 ThirdParty/FreeRTOS/
-└── FreeRTOSConfig.h  # Tick rate, priorities, heap size
+└── FreeRTOSConfig.h # Tick rate, task priorities, heap size
 ```
 
 ---
-*STM32F401RE | FreeRTOS | MPU6050 | DMA | UART | IT | ADC*
+
+*STM32F401RE · FreeRTOS · MPU6050 · DMA · UART · ADC · Logic Analyzer*
